@@ -1,5 +1,6 @@
 /**
- * Personal Budget PWA — v7.2 Production Logic Engine (Part 1/2)
+ * Personal Budget PWA — v7.3 Logic Engine (Part 1/2)
+ * Features: Category-Specific Labels, Safe Storage, Full CRUD
  */
 
 const STORAGE_KEY = "personal-budget-db";
@@ -25,6 +26,18 @@ const DEFAULT_INC = [
   { name: "Other Income", icon: "➕", color: "#f1f1f6" }
 ];
 
+const DEFAULT_LABELS = [
+  { name: "Rent", cat: "Home Bills" },
+  { name: "Cleaning", cat: "Home Bills" },
+  { name: "Subscriptions", cat: "Home Bills" },
+  { name: "Electricity", cat: "Home Bills" },
+  { name: "Mess", cat: "Food & Drink" },
+  { name: "Eating Outside", cat: "Food & Drink" },
+  { name: "Groceries", cat: "Food & Drink" },
+  { name: "Cab / Auto", cat: "Transport" },
+  { name: "Fuel", cat: "Transport" }
+];
+
 const ADVICE = [
   ["Protect your savings rate", "Fund saving and investing before expanding discretionary spending."],
   ["Move the budget, not the goal", "For a big purchase, transfer money between categories so your total monthly plan stays honest."],
@@ -48,7 +61,7 @@ function blank() {
     budgetTransfers: [],
     autopay: [],
     goals: [],
-    labels: [],
+    labels: DEFAULT_LABELS,
     rollovers: []
   };
 }
@@ -68,7 +81,14 @@ function migrate(x) {
   b.budgetTransfers = Array.isArray(x.budgetTransfers) ? x.budgetTransfers : [];
   b.autopay = Array.isArray(x.autopay) ? x.autopay : [];
   b.goals = Array.isArray(x.goals) ? x.goals : [];
-  b.labels = Array.isArray(x.labels) ? x.labels : [];
+  
+  // Normalize labels (supports legacy array of strings)
+  if (Array.isArray(x.labels)) {
+    b.labels = x.labels.map(l => typeof l === "string" ? { name: l, cat: "" } : l);
+  } else {
+    b.labels = DEFAULT_LABELS;
+  }
+
   b.rollovers = Array.isArray(x.rollovers) ? x.rollovers : [];
   return b;
 }
@@ -180,8 +200,9 @@ function accountOptions(selected = "") {
   return db.accounts.map(a => `<option value="${a.id}" ${a.id === selected ? 'selected' : ''}>${esc(a.name)}</option>`).join("") || '<option value="">Cash / Default</option>';
 }
 
-function labelOptions(selected = "") {
-  return db.labels.map(l => `<option value="${esc(l)}" ${l === selected ? 'selected' : ''}>${esc(l)}</option>`).join("");
+function labelOptions(category = "", selected = "") {
+  const filtered = db.labels.filter(l => !l.cat || l.cat === category);
+  return filtered.map(l => `<option value="${esc(l.name)}" ${l.name === selected ? 'selected' : ''}>#${esc(l.name)}</option>`).join("");
 }
 
 function openExpense(catName) {
@@ -202,7 +223,7 @@ function openExpense(catName) {
       </div>
     </div>
     <label>Label</label>
-    <select id="fLabel"><option value="">None</option>${labelOptions()}</select>
+    <select id="fLabel"><option value="">None</option>${labelOptions(catName)}</select>
     <label>Note</label>
     <textarea id="fNote" placeholder="Optional notes"></textarea>
   `;
@@ -233,10 +254,12 @@ function openExpense(catName) {
 
 function openIncome(catName = "") {
   const cats = db.incomeCats;
+  const initialCat = catName || cats[0]?.name || "Salary";
+  
   const html = `
     ${catName ? `<span class="pill">${esc(catName)}</span>` : `
       <label>Category</label>
-      <select id="iCat">${cats.map(c => `<option value="${esc(c.name)}">${esc(c.name)}</option>`).join("")}</select>
+      <select id="iCat" onchange="updateIncomeLabels()">${cats.map(c => `<option value="${esc(c.name)}" ${c.name === initialCat ? 'selected' : ''}>${esc(c.name)}</option>`).join("")}</select>
     `}
     <label>Amount (₹) *</label>
     <input id="iAmt" type="number" step="any" min="0.01" inputmode="decimal" placeholder="0.00" autofocus>
@@ -253,7 +276,7 @@ function openIncome(catName = "") {
       </div>
     </div>
     <label>Label</label>
-    <select id="iLabel"><option value="">None</option>${labelOptions()}</select>
+    <select id="iLabel"><option value="">None</option>${labelOptions(initialCat)}</select>
     <label>Note</label>
     <textarea id="iNote" placeholder="Optional notes"></textarea>
   `;
@@ -282,6 +305,11 @@ function openIncome(catName = "") {
     save();
     closeModal();
   });
+}
+
+function updateIncomeLabels() {
+  const cat = $("iCat").value;
+  $("iLabel").innerHTML = `<option value="">None</option>${labelOptions(cat)}`;
 }
 
 function openQuickIncome() {
@@ -467,10 +495,13 @@ function editTx(id) {
   if (!t) return;
 
   const isExpense = t.type === 'expense';
+  const catList = isExpense ? db.expenseCats : db.incomeCats;
+  const currentCat = t.cat || catList[0]?.name || "";
+
   const html = `
     <label>Category</label>
-    <select id="editCat">
-      ${(isExpense ? db.expenseCats : db.incomeCats).map(c => `<option value="${esc(c.name)}" ${t.cat === c.name ? 'selected' : ''}>${esc(c.name)}</option>`).join("")}
+    <select id="editCat" onchange="updateEditLabels()">
+      ${catList.map(c => `<option value="${esc(c.name)}" ${t.cat === c.name ? 'selected' : ''}>${esc(c.name)}</option>`).join("")}
     </select>
     <label>Amount (₹) *</label>
     <input id="editAmt" type="number" step="any" value="${t.amount}">
@@ -487,7 +518,7 @@ function editTx(id) {
       </div>
     </div>
     <label>Label</label>
-    <select id="editLabel"><option value="">None</option>${labelOptions(t.label)}</select>
+    <select id="editLabel"><option value="">None</option>${labelOptions(currentCat, t.label)}</select>
     <label>Note</label>
     <textarea id="editNote">${esc(t.note || "")}</textarea>
   `;
@@ -508,8 +539,13 @@ function editTx(id) {
     closeModal();
   });
 }
+
+function updateEditLabels() {
+  const cat = $("editCat").value;
+  $("editLabel").innerHTML = `<option value="">None</option>${labelOptions(cat)}`;
+}
 /**
- * Personal Budget PWA — v7.2 Production Logic Engine (Part 2/2)
+ * Personal Budget PWA — v7.3 Logic Engine (Part 2/2)
  */
 
 function openAutopay() {
@@ -756,7 +792,7 @@ function openBudgetTransfer() {
   });
 }
 
-// --- Categories & Labels ---
+// --- Categories & Category-Bound Labels ---
 function openCategoryManager() {
   modal(`
     <h2>Category Manager</h2>
@@ -852,17 +888,26 @@ function categoryForm(type, oldName = "") {
 }
 
 function openLabels() {
+  const allCats = [...db.expenseCats.map(c => c.name), ...db.incomeCats.map(c => c.name)];
+  
   modal(`
-    <h2>🏷️ Labels</h2>
-    <p class="muted" style="margin-top:-6px;font-size:12px">Tag transactions for trips, events, college, or special projects.</p>
-    <div style="display:flex;gap:8px;margin:12px 0">
-      <input id="newLabelInput" placeholder="New tag name (e.g. GoaTrip)" style="margin:0">
-      <button class="primary" style="flex:none;width:90px" onclick="addNewLabel()">+ Add</button>
+    <h2>🏷️ Category-Specific Labels</h2>
+    <p class="muted" style="margin-top:-6px;font-size:12px">Bind custom tags to specific categories (e.g. Rent to Home Bills, Mess to Food).</p>
+    <div class="row" style="margin:12px 0 6px">
+      <input id="newLabelInput" placeholder="Label tag name (e.g. Rent)" style="margin:0">
+      <select id="newLabelCat" style="margin:0">
+        <option value="">(All Categories)</option>
+        ${allCats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('')}
+      </select>
     </div>
-    <div class="list" style="margin-top:12px" id="labelListContainer">
+    <button class="primary" style="width:100%;margin-bottom:12px" onclick="addNewLabel()">+ Add Label Tag</button>
+    <div class="list" id="labelListContainer">
       ${db.labels.map((l, i) => `
         <div class="item">
-          <b>#${esc(l)}</b>
+          <div>
+            <b>#${esc(l.name)}</b>
+            <br><span class="muted" style="font-size:12px">${esc(l.cat || 'All Categories')}</span>
+          </div>
           <button onclick="removeLabel(${i})">×</button>
         </div>
       `).join('') || '<p class="muted">No labels created yet.</p>'}
@@ -872,17 +917,18 @@ function openLabels() {
 
 function addNewLabel() {
   const input = $("newLabelInput");
+  const catSelect = $("newLabelCat");
   if (!input) return;
+
   const val = input.value.trim().replace(/^#/, '');
-  if (!val) {
-    alert("Please enter a label name.");
-    return;
+  const cat = catSelect ? catSelect.value : "";
+
+  if (!val) return alert("Please enter a label name.");
+  if (db.labels.some(l => l.name.toLowerCase() === val.toLowerCase() && l.cat === cat)) {
+    return alert("This label already exists for the chosen category.");
   }
-  if (db.labels.includes(val)) {
-    alert("This label already exists.");
-    return;
-  }
-  db.labels.push(val);
+
+  db.labels.push({ name: val, cat });
   save();
   openLabels();
 }
@@ -893,7 +939,7 @@ function removeLabel(idx) {
   openLabels();
 }
 
-// --- Insights, Reports & Tools ---
+// --- Insights & Reports ---
 function showInsights() {
   const m = monthKey();
   const tx = db.tx.filter(t => t.date && t.date.startsWith(m));
@@ -1039,7 +1085,7 @@ function resetData() {
   }
 }
 
-// --- Render Operations ---
+// --- Master UI Render Operations ---
 function renderHome() {
   const m = monthKey();
   const tx = db.tx.filter(t => t.date && t.date.startsWith(m));
@@ -1246,7 +1292,6 @@ function showTab(id) {
   renderAll();
 }
 
-// Request persistent storage on iOS/browsers to prevent eviction
 if (navigator.storage && navigator.storage.persist) {
   navigator.storage.persist().catch(() => {});
 }

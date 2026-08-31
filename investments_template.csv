@@ -1,0 +1,3 @@
+name,type,quantity,invested,current_value,broker,note
+Reliance,Stock,10,14200,15100,Zerodha,
+Example Fund,Mutual Fund,100,10000,10800,,

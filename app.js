@@ -1,5 +1,5 @@
 /**
- * Personal Budget PWA — v7 Production Logic Engine
+ * Personal Budget PWA — v7.2 Production Logic Engine (Part 1/2)
  */
 
 const STORAGE_KEY = "personal-budget-db";
@@ -508,6 +508,9 @@ function editTx(id) {
     closeModal();
   });
 }
+/**
+ * Personal Budget PWA — v7.2 Production Logic Engine (Part 2/2)
+ */
 
 function openAutopay() {
   modal(`
@@ -577,31 +580,71 @@ function openAutopayForm(id = "") {
   });
 }
 
+// --- Savings Goals Engine ---
 function openGoal(id = "") {
+  if (!id && db.goals.length > 0) {
+    openGoalList();
+    return;
+  }
+  openGoalForm(id);
+}
+
+function openGoalList() {
+  modal(`
+    <h2>🎯 Savings Goals</h2>
+    <div class="actions"><button class="primary" onclick="openGoalForm()">+ New Savings Goal</button></div>
+    <div class="list" style="margin-top:15px">
+      ${db.goals.map(g => {
+        const pct = g.target > 0 ? Math.min(100, Math.round((g.current / g.target) * 100)) : 0;
+        return `
+          <div class="card" style="margin:6px 0;padding:12px">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <b>${esc(g.name)}</b>
+              <span>${money(g.current)} / <b>${money(g.target)}</b></span>
+            </div>
+            <div class="bar" style="margin:8px 0"><i style="width:${pct}%"></i></div>
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span class="muted">${pct}% saved ${g.due ? `· Target: ${esc(g.due)}` : ''}</span>
+              <span>
+                <button onclick="openGoalForm('${g.id}')">Edit</button>
+                <button onclick="deleteBy('goals','${g.id}');openGoalList()">×</button>
+              </span>
+            </div>
+          </div>
+        `;
+      }).join('') || '<p class="muted">No savings goals created.</p>'}
+    </div>
+  `);
+}
+
+function openGoalForm(id = "") {
   const g = db.goals.find(x => x.id === id) || {};
   const html = `
     <label>Goal Name *</label>
-    <input id="gName" value="${esc(g.name || "")}" placeholder="Emergency Fund / Laptop" autofocus>
+    <input id="gName" value="${esc(g.name || "")}" placeholder="e.g. Emergency Fund, New Phone" autofocus>
     <div class="row">
       <div>
         <label>Target Amount (₹) *</label>
-        <input id="gTarget" type="number" step="any" value="${g.target ?? 0}">
+        <input id="gTarget" type="number" step="any" min="1" value="${g.target ?? ""}" placeholder="50000">
       </div>
       <div>
         <label>Saved so far (₹)</label>
-        <input id="gCur" type="number" step="any" value="${g.current ?? 0}">
+        <input id="gCur" type="number" step="any" min="0" value="${g.current ?? 0}">
       </div>
     </div>
-    <label>Target Date</label>
+    <label>Target Date (Optional)</label>
     <input id="gDue" type="date" value="${g.due || ""}">
     <label>Note</label>
-    <input id="gNote" value="${esc(g.note || "")}">
+    <input id="gNote" value="${esc(g.note || "")}" placeholder="Optional details">
   `;
 
   openFormModal(id ? "Edit Savings Goal" : "Add Savings Goal", html, () => {
     const name = $("gName").value.trim();
     const target = parseFloat($("gTarget").value);
-    if (!name || !target) return alert("Valid name and target amount are required.");
+    const current = parseFloat($("gCur").value) || 0;
+
+    if (!name) return alert("Please enter a goal name.");
+    if (!target || isNaN(target) || target <= 0) return alert("Please enter a valid target amount greater than 0.");
 
     let item = db.goals.find(x => x.id === id);
     if (!item) {
@@ -610,15 +653,16 @@ function openGoal(id = "") {
     }
     item.name = name;
     item.target = target;
-    item.current = parseFloat($("gCur").value) || 0;
+    item.current = current;
     item.due = $("gDue").value;
     item.note = $("gNote").value.trim();
 
     save();
-    closeModal();
+    openGoalList();
   });
 }
 
+// --- Budgeting & Allocations ---
 function budgetBase() {
   let inc = db.tx.filter(t => t.type === 'income' && t.date?.startsWith(monthKey())).reduce((s, t) => s + Number(t.amount || 0), 0);
   let alloc = {};
@@ -712,6 +756,7 @@ function openBudgetTransfer() {
   });
 }
 
+// --- Categories & Labels ---
 function openCategoryManager() {
   modal(`
     <h2>Category Manager</h2>
@@ -808,40 +853,47 @@ function categoryForm(type, oldName = "") {
 
 function openLabels() {
   modal(`
-    <h2>Labels</h2>
-    <div class="row">
-      <input id="newLabel" placeholder="New label tag">
-      <button class="primary" id="addLabelBtn">+ Add</button>
+    <h2>🏷️ Labels</h2>
+    <p class="muted" style="margin-top:-6px;font-size:12px">Tag transactions for trips, events, college, or special projects.</p>
+    <div style="display:flex;gap:8px;margin:12px 0">
+      <input id="newLabelInput" placeholder="New tag name (e.g. GoaTrip)" style="margin:0">
+      <button class="primary" style="flex:none;width:90px" onclick="addNewLabel()">+ Add</button>
     </div>
-    <div class="list" style="margin-top:12px" id="labelContainer">
+    <div class="list" style="margin-top:12px" id="labelListContainer">
       ${db.labels.map((l, i) => `
         <div class="item">
           <b>#${esc(l)}</b>
-          <button data-idx="${i}" class="del-label">×</button>
+          <button onclick="removeLabel(${i})">×</button>
         </div>
-      `).join('') || '<p class="muted">No labels added.</p>'}
+      `).join('') || '<p class="muted">No labels created yet.</p>'}
     </div>
   `);
-
-  $("addLabelBtn").onclick = () => {
-    const val = $("newLabel").value.trim().replace(/^#/, '');
-    if (val && !db.labels.includes(val)) {
-      db.labels.push(val);
-      save();
-      openLabels();
-    }
-  };
-
-  document.querySelectorAll(".del-label").forEach(b => {
-    b.onclick = () => {
-      const idx = parseInt(b.dataset.idx, 10);
-      db.labels.splice(idx, 1);
-      save();
-      openLabels();
-    };
-  });
 }
 
+function addNewLabel() {
+  const input = $("newLabelInput");
+  if (!input) return;
+  const val = input.value.trim().replace(/^#/, '');
+  if (!val) {
+    alert("Please enter a label name.");
+    return;
+  }
+  if (db.labels.includes(val)) {
+    alert("This label already exists.");
+    return;
+  }
+  db.labels.push(val);
+  save();
+  openLabels();
+}
+
+function removeLabel(idx) {
+  db.labels.splice(idx, 1);
+  save();
+  openLabels();
+}
+
+// --- Insights, Reports & Tools ---
 function showInsights() {
   const m = monthKey();
   const tx = db.tx.filter(t => t.date && t.date.startsWith(m));
@@ -987,6 +1039,7 @@ function resetData() {
   }
 }
 
+// --- Render Operations ---
 function renderHome() {
   const m = monthKey();
   const tx = db.tx.filter(t => t.date && t.date.startsWith(m));
@@ -1078,6 +1131,29 @@ function renderAccounts() {
     `;
   }).join('') || '<div class="empty">No investments recorded.</div>';
 
+  const goalContainer = $("goalList");
+  if (goalContainer) {
+    goalContainer.innerHTML = db.goals.map(g => {
+      const pct = g.target > 0 ? Math.min(100, Math.round((g.current / g.target) * 100)) : 0;
+      return `
+        <div class="card" style="margin:6px 0;padding:12px">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <b>${esc(g.name)}</b>
+            <span>${money(g.current)} / <b>${money(g.target)}</b></span>
+          </div>
+          <div class="bar" style="margin:8px 0"><i style="width:${pct}%"></i></div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span class="muted">${pct}% saved ${g.due ? `· Target: ${esc(g.due)}` : ''}</span>
+            <span>
+              <button onclick="openGoalForm('${g.id}')">Edit</button>
+              <button onclick="deleteBy('goals','${g.id}')">×</button>
+            </span>
+          </div>
+        </div>
+      `;
+    }).join('') || '<div class="empty">No savings goals set.</div>';
+  }
+
   $("liabilityList").innerHTML = db.liabilities.map(l => `
     <div class="item">
       <div><b>${esc(l.name)}</b><br><span class="muted">${l.rate}% · EMI ${money(l.emi)} · Due ${esc(l.due || '—')}</span></div>
@@ -1168,6 +1244,11 @@ function showTab(id) {
   document.querySelectorAll(".screen").forEach(s => s.classList.toggle("active", s.id === id));
   document.querySelectorAll(".tab").forEach(b => b.classList.toggle("active", b.dataset.tab === id));
   renderAll();
+}
+
+// Request persistent storage on iOS/browsers to prevent eviction
+if (navigator.storage && navigator.storage.persist) {
+  navigator.storage.persist().catch(() => {});
 }
 
 window.addEventListener("DOMContentLoaded", () => {

@@ -1,16 +1,1 @@
-{
-  "name": "Personal Budget",
-  "short_name": "Budget",
-  "start_url": "./",
-  "display": "standalone",
-  "background_color": "#f8f8fb",
-  "theme_color": "#5154a5",
-  "icons": [
-    {
-      "src": "icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
-    }
-  ]
-}
+{"name":"Personal Budget","short_name":"Budget","start_url":"./","display":"standalone","background_color":"#f8f8fb","theme_color":"#5154a5","icons":[{"src":"icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]}

@@ -14,7 +14,7 @@ const $=id=>document.getElementById(id); const uid=()=>crypto.randomUUID?crypto.
 function save(){localStorage.setItem(KEY,JSON.stringify(db));renderAll()}
 function money(n){return "₹"+Math.round(Number(n)||0).toLocaleString("en-IN")}
 function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
-function today(){return new Date().toISOString().slice(0,10)} function monthKey(d=today()){return d.slice(0,7)} function monthLabel(k=monthKey()){let [y,m]=k.split("-");return new Date(+y,+m-1,1).toLocaleDateString("en-IN",{month:"long",year:"numeric"})}
+function today(){return localDate()} function monthKey(d=today()){return d.slice(0,7)} function monthLabel(k=monthKey()){let [y,m]=k.split("-");return new Date(+y,+m-1,1).toLocaleDateString("en-IN",{month:"long",year:"numeric"})}
 function months(){let out=[],d=new Date();for(let i=0;i<18;i++){let k=d.toISOString().slice(0,7);out.push(k);d.setMonth(d.getMonth()-1)}return out}
 $("monthLabel").textContent=monthLabel();
 document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>showTab(b.dataset.tab));

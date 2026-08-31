@@ -1,1 +1,4 @@
 
+Date,Type,Category,Description,Amount,Account,Label,Note
+2026-04-01,expense,Food & Drink,Groceries,450,Cash,,Weekly store run
+2026-04-02,income,Salary,Monthly Paycheck,75000,Bank,Work,Direct deposit

@@ -14,3 +14,7 @@ No bank sync, GPS, analytics or device tracking.
 - Removed category helper text
 - Fixed robust income and expense save validation
 - Service-worker cache bumped to v4
+
+
+## v6
+All major sections now have working add/edit/delete forms. CSV templates are in `csv-templates/`. JSON remains the full-fidelity backup format.

@@ -1,81 +1,201 @@
-const KEY="personalBudgetLocalV2";
-const DEFAULT_EXP=[
- {name:"Markets",icon:"🎯",color:"#e8dcff"},{name:"Food & Drink",icon:"🍽️",color:"#fff1cf"},{name:"Transport",icon:"🚆",color:"#dcecff"},{name:"Shopping",icon:"🛍️",color:"#ffdede"},{name:"Self-Care",icon:"🧴",color:"#eee1ff"},{name:"Home Bills",icon:"⚡",color:"#ffe8d7"},{name:"Health",icon:"✚",color:"#d6f8f1"},{name:"Education",icon:"🎓",color:"#ffe2ec"}
-];
-const DEFAULT_INC=[{name:"Salary",icon:"💼",color:"#e1f6e9"},{name:"Pocket Money",icon:"💵",color:"#f7e7ff"},{name:"Interest",icon:"🏦",color:"#e5f0ff"},{name:"Dividend",icon:"📈",color:"#fff0c9"},{name:"Freelance",icon:"🧑‍💻",color:"#e8f7f2"},{name:"Other Income",icon:"➕",color:"#f1f1f6"}];
-const ADVICE=[
- ["Protect your savings rate","Fund saving and investing before expanding discretionary spending."],["Move the budget, not the goal","For a big purchase, transfer money between categories so your total monthly plan stays honest."],["Watch fixed costs","Recurring payments quietly compound. Review subscriptions and autopays every few months."],["Net worth beats cash balance","Track investments and liabilities alongside cash to see whether your overall position is improving."],["Use Remaining carefully","A Remaining category should receive only the pool left after fixed and minimum allocations."],["Build a buffer","An emergency reserve reduces the need to raid long-term investments when something unexpected happens."]
-];
-function blank(){return {version:2,settings:{currency:"INR"},expenseCats:DEFAULT_EXP,incomeCats:DEFAULT_INC,accounts:[],tx:[],investments:[],liabilities:[],budgets:[],budgetTransfers:[],autopay:[],goals:[],labels:[],rollovers:[]}}
-function migrate(x){let b=blank(); if(!x)return b; Object.assign(b,x); b.version=2;b.expenseCats=(Array.isArray(x.expenseCats)&&x.expenseCats.length?x.expenseCats:DEFAULT_EXP);b.incomeCats=(Array.isArray(x.incomeCats)&&x.incomeCats.length?x.incomeCats:DEFAULT_INC);b.budgets=x.budgets||[];b.labels=x.labels||[];b.rollovers=x.rollovers||[];return b}
-function load(){try{return migrate(JSON.parse(localStorage.getItem(KEY)))}catch(e){return blank()}}
+const KEY="pb_v6";
+const DEFAULT={
+  version:6,
+  settings:{expenseCats:["Food & Drink","Home Bills","Transport","Shopping","Markets","Health","Education","Entertainment","Personal","Other"],incomeCats:["Salary","Pocket Money","Interest","Dividend","Freelance","Other Income"],expenseOrder:[],incomeOrder:[]},
+  tx:[],
+  accounts:[],
+  investments:[],
+  autopay:[],
+  goals:[],
+  liabilities:[],
+  budget:{month:"",overall:0,cats:{},transfers:[],rollover:true}
+};
 let db=load();
-const $=id=>document.getElementById(id); const uid=()=>crypto.randomUUID?crypto.randomUUID():Date.now()+"-"+Math.random();
-function save(){localStorage.setItem(KEY,JSON.stringify(db));renderAll()}
-function money(n){return "₹"+Math.round(Number(n)||0).toLocaleString("en-IN")}
-function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
-function localDate(d=new Date()){const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,"0"),day=String(d.getDate()).padStart(2,"0");return `${y}-${m}-${day}`} function today(){return localDate()} function monthKey(d=today()){return d.slice(0,7)} function monthLabel(k=monthKey()){let [y,m]=k.split("-");return new Date(+y,+m-1,1).toLocaleDateString("en-IN",{month:"long",year:"numeric"})}
-function months(){let out=[],d=new Date();for(let i=0;i<18;i++){let k=d.toISOString().slice(0,7);out.push(k);d.setMonth(d.getMonth()-1)}return out}
-$("monthLabel").textContent=monthLabel();
-document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
-function showTab(id){document.querySelectorAll(".screen").forEach(s=>s.classList.toggle("active",s.id===id));document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===id));renderAll()}
-function modal(html){$("modalBody").innerHTML=html;$("modal").classList.add("open")} function closeModal(){$("modal").classList.remove("open")}
-function form(title,body,submit){modal(`<h2>${title}</h2>${body}<div class="actions" style="margin-top:15px"><button onclick="closeModal()">Cancel</button><button class="primary" onclick="${submit}">Save</button></div>`)}
-function accountOptions(selected=""){return db.accounts.map(a=>`<option value="${a.id}" ${a.id===selected?'selected':''}>${esc(a.name)}</option>`).join("")||'<option value="">No account yet</option>'}
-function labelOptions(){return db.labels.map(l=>`<option>${esc(l)}</option>`).join("")}
-function openExpense(cat){form("Add Expense",`<span class="pill">${esc(cat)}</span><label>Amount</label><input id="fAmt" type="number" min="0" inputmode="decimal"><label>Description</label><input id="fDesc" placeholder="${esc(cat)}"><div class="row"><div><label>Date</label><input id="fDate" type="date" value="${today()}"></div><div><label>Account</label><select id="fAcc">${accountOptions()}</select></div></div><label>Label</label><select id="fLabel"><option value="">None</option>${labelOptions()}</select><label>Note</label><textarea id="fNote" placeholder="Optional"></textarea>`,`addExpense("${esc(cat)}")`)}
-function addExpense(cat){let amount=+$("fAmt").value;if(!amount)return;db.tx.unshift({id:uid(),type:"expense",cat,amount,desc:$("fDesc").value||cat,date:$("fDate").value,account:$("fAcc").value,label:$("fLabel").value,note:$("fNote").value});save();closeModal()}
-function openIncome(cat=""){let cats=db.incomeCats;form("Add Income",`${cat?`<span class="pill">${esc(cat)}</span>`:`<label>Category</label><select id="iCat">${cats.map(c=>`<option>${esc(c.name)}</option>`).join("")}</select>`}<label>Amount</label><input id="iAmt" type="number" min="0"><label>Source</label><input id="iDesc" placeholder="Salary / allowance"><div class="row"><div><label>Date</label><input id="iDate" type="date" value="${today()}"></div><div><label>Account</label><select id="iAcc">${accountOptions()}</select></div></div><label>Label</label><select id="iLabel"><option value="">None</option>${labelOptions()}</select><label>Note</label><textarea id="iNote"></textarea>`,`addIncome(${JSON.stringify(cat)})`)}
-function openQuickIncome(){openIncome()}
-function addIncome(cat){let amount=+$('iAmt').value;if(!amount)return;let c=cat||$('iCat').value;db.tx.unshift({id:uid(),type:"income",cat:c,amount,desc:$('iDesc').value||c,date:$('iDate').value,account:$('iAcc').value,label:$('iLabel').value,note:$('iNote').value});save();closeModal()}
-function openAccount(editId=""){let a=db.accounts.find(x=>x.id===editId)||{};form(editId?"Edit Account":"Add Account",`<label>Name</label><input id="aName" value="${esc(a.name||"")}" placeholder="Bank / Cash / Wallet"><label>Type</label><select id="aType">${["Bank","Cash","Wallet","Credit Card","Broker","Other"].map(x=>`<option ${a.type===x?'selected':''}>${x}</option>`).join("")}</select><label>Opening balance</label><input id="aBal" type="number" value="${a.opening??0}"><label>Note</label><input id="aNote" value="${esc(a.note||"")}">`,`saveAccount(${JSON.stringify(editId)})`)}
-function saveAccount(id){let a=db.accounts.find(x=>x.id===id);if(!a){a={id:uid()};db.accounts.push(a)}a.name=$('aName').value||"Account";a.type=$('aType').value;a.opening=+$('aBal').value||0;a.note=$('aNote').value;save();closeModal()}
-function accountBalance(a){let v=+a.opening||0;db.tx.forEach(t=>{if(t.type==='income'&&t.account===a.id)v+=+t.amount;if(t.type==='expense'&&t.account===a.id)v-=+t.amount;if(t.type==='transfer'){if(t.from===a.id)v-=+t.amount;if(t.to===a.id)v+=+t.amount}});return v}
-function openTransfer(){if(db.accounts.length<2)return alert("Add at least two accounts first.");form("Account Transfer",`<label>From</label><select id="tFrom">${accountOptions()}</select><label>To</label><select id="tTo">${accountOptions()}</select><label>Amount</label><input id="tAmt" type="number" min="0"><label>Date</label><input id="tDate" type="date" value="${today()}"><label>Note</label><input id="tNote">`,`addTransfer()`)}
-function addTransfer(){let x=+$('tAmt').value;if(!x||$('tFrom').value===$('tTo').value)return;db.tx.unshift({id:uid(),type:'transfer',amount:x,from:$('tFrom').value,to:$('tTo').value,date:$('tDate').value,desc:'Account transfer',note:$('tNote').value});save();closeModal()}
-function openInvestment(editId=""){let i=db.investments.find(x=>x.id===editId)||{};form(editId?"Edit Investment":"Add Investment",`<label>Type</label><select id="vType">${["Stock","Mutual Fund","FD","Gold","Bond","ETF","Crypto","Other"].map(x=>`<option ${i.type===x?'selected':''}>${x}</option>`).join("")}</select><label>Name / Scheme</label><input id="vName" value="${esc(i.name||"")}" placeholder="Company / fund / bank"><div class="row"><div><label>Quantity / Units</label><input id="vQty" type="number" step="0.0001" value="${i.qty??0}"></div><div><label>Avg / Invested</label><input id="vInv" type="number" value="${i.invested??0}"></div></div><label>Current value</label><input id="vCur" type="number" value="${i.current??0}"><label>Account / Broker</label><input id="vBroker" value="${esc(i.broker||"")}" placeholder="Zerodha / bank / AMC"><label>Extra details</label><textarea id="vNote">${esc(i.note||"")}</textarea>`,`saveInvestment(${JSON.stringify(editId)})`)}
-function saveInvestment(id){let i=db.investments.find(x=>x.id===id);if(!i){i={id:uid()};db.investments.push(i)}i.type=$('vType').value;i.name=$('vName').value||'Investment';i.qty=+$('vQty').value||0;i.invested=+$('vInv').value||0;i.current=+$('vCur').value||0;i.broker=$('vBroker').value;i.note=$('vNote').value;save();closeModal()}
-function openLiability(editId=""){let l=db.liabilities.find(x=>x.id===editId)||{};form(editId?"Edit Liability":"Add Liability",`<label>Name</label><input id="lName" value="${esc(l.name||"")}" placeholder="Loan / credit card"><label>Outstanding</label><input id="lAmt" type="number" value="${l.amount??0}"><label>Interest %</label><input id="lRate" type="number" step=".01" value="${l.rate??0}"><label>EMI</label><input id="lEmi" type="number" value="${l.emi??0}"><label>Next due</label><input id="lDue" type="date" value="${l.due||""}">`,`saveLiability(${JSON.stringify(editId)})`)}
-function saveLiability(id){let l=db.liabilities.find(x=>x.id===id);if(!l){l={id:uid()};db.liabilities.push(l)}l.name=$('lName').value||'Liability';l.amount=+$('lAmt').value||0;l.rate=+$('lRate').value||0;l.emi=+$('lEmi').value||0;l.due=$('lDue').value;save();closeModal()}
-function budgetBase(){let inc=db.tx.filter(t=>t.type==='income'&&t.date?.startsWith(monthKey())).reduce((s,t)=>s+t.amount,0);let alloc={};let fixed=0,min=0,remaining=[];db.budgets.forEach(b=>{if(b.rule==='remaining')remaining.push(b);else {alloc[b.cat]=+b.amount||0;if(b.rule==='fixed')fixed+=+b.amount||0;else min+=+b.amount||0}});let pool=Math.max(0,inc-fixed-min);remaining.forEach(b=>alloc[b.cat]=pool/Math.max(1,remaining.length));return {inc,alloc,total:Object.values(alloc).reduce((s,v)=>s+v,0)}}
-function adjustedAlloc(){let a=budgetBase().alloc;db.budgetTransfers.filter(t=>t.date?.startsWith(monthKey())).forEach(t=>{a[t.from]=(a[t.from]||0)-t.amount;a[t.to]=(a[t.to]||0)+t.amount});return a}
-function openBudget(){let cats=db.expenseCats;form("Category Budget",`<label>Category</label><select id="bCat">${cats.map(c=>`<option>${esc(c.name)}</option>`).join("")}</select><label>Rule</label><select id="bRule"><option value="fixed">Fixed amount</option><option value="minimum">Minimum allocation</option><option value="remaining">Remaining monthly balance</option></select><label>Amount (ignored for Remaining)</label><input id="bAmt" type="number" min="0"><p class="muted">Fixed = exact planned amount. Minimum = protected allocation. Remaining divides whatever is left after fixed/minimum rules.</p>`,`addBudget()`)}
-function addBudget(){let c=$('bCat').value,b=db.budgets.find(x=>x.cat===c);if(!b){b={cat:c};db.budgets.push(b)}b.rule=$('bRule').value;b.amount=+$('bAmt').value||0;save();closeModal()}
-function openBudgetTransfer(){let cats=db.expenseCats.map(c=>c.name);form("Move Budget",`<label>From</label><select id="btFrom">${cats.map(c=>`<option>${esc(c)}</option>`).join("")}</select><label>To</label><select id="btTo">${cats.map(c=>`<option>${esc(c)}</option>`).join("")}</select><label>Amount</label><input id="btAmt" type="number" min="0"><label>Reason</label><input id="btReason" placeholder="Big purchase"><p class="muted">This changes the plan for the current month; it does not create income or an expense.</p>`,`addBudgetTransfer()`)}
-function addBudgetTransfer(){let x=+$('btAmt').value;if(!x||$('btFrom').value===$('btTo').value)return;let alloc=adjustedAlloc();if((alloc[$('btFrom').value]||0)<x)return alert("Not enough planned money in the source category.");db.budgetTransfers.unshift({id:uid(),from:$('btFrom').value,to:$('btTo').value,amount:x,reason:$('btReason').value,date:today()});save();closeModal()}
-function openRollover(){let m=monthKey(),alloc=adjustedAlloc(),spent={};db.tx.filter(t=>t.type==='expense'&&t.date?.startsWith(m)).forEach(t=>spent[t.cat]=(spent[t.cat]||0)+t.amount);let rows=Object.keys(alloc).map(c=>{let rem=(alloc[c]||0)-(spent[c]||0);return `<div class="item"><span><b>${esc(c)}</b><br><span class="muted">Unused ${money(Math.max(0,rem))}</span></span><button onclick="rolloverCat('${esc(c)}',${Math.max(0,rem)})">Rollover</button></div>`}).join('');modal(`<h2>Rollover Unused Budget</h2><p class="muted">Save unused planned amounts as next month's starting adjustments.</p><div class="list">${rows||'<div class="empty">No budget rules.</div>'}</div>`)}
-function rolloverCat(cat,amount){if(!amount)return;db.rollovers.push({id:uid(),fromMonth:monthKey(),cat,amount});save();closeModal();alert(`${money(amount)} saved for ${cat}.`)}
-function openAutopay(){modal(`<h2>Autopay & Recurring</h2><div class="actions"><button class="primary" onclick="openAutopayForm()">+ Add</button></div><div class="list" style="margin-top:15px">${db.autopay.map(a=>`<div class="item"><div><b>${esc(a.name)}</b><br><span class="muted">${esc(a.frequency)} · Due ${esc(a.next||'—')} · ${esc(a.cat||'Uncategorised')}</span></div><div class="right">${money(a.amount)}<br><button onclick="openAutopayForm('${a.id}')">Edit</button> <button onclick="deleteBy('autopay','${a.id}')">×</button></div></div>`).join('')||'<p class="muted">No recurring payments.</p>'}</div>`)}
-function openAutopayForm(id=""){let a=db.autopay.find(x=>x.id===id)||{};form(id?"Edit Recurring Payment":"Add Recurring Payment",`<label>Name</label><input id="pName" value="${esc(a.name||"")}" placeholder="Spotify"><div class="row"><div><label>Amount</label><input id="pAmt" type="number" value="${a.amount??0}"></div><div><label>Next due</label><input id="pNext" type="date" value="${a.next||today()}"></div></div><label>Frequency</label><select id="pFreq">${["Weekly","Monthly","Quarterly","Yearly"].map(x=>`<option ${a.frequency===x?'selected':''}>${x}</option>`).join("")}</select><label>Expense category</label><select id="pCat">${db.expenseCats.map(c=>`<option ${a.cat===c.name?'selected':''}>${esc(c.name)}</option>`).join("")}</select><label>Account</label><select id="pAcc">${accountOptions(a.account)}</select><label>Reminder days before</label><input id="pRem" type="number" value="${a.reminder??3}">`,`saveAutopay(${JSON.stringify(id)})`)}
-function saveAutopay(id){let a=db.autopay.find(x=>x.id===id);if(!a){a={id:uid()};db.autopay.push(a)}a.name=$('pName').value||'Recurring payment';a.amount=+$('pAmt').value||0;a.next=$('pNext').value;a.frequency=$('pFreq').value;a.cat=$('pCat').value;a.account=$('pAcc').value;a.reminder=+$('pRem').value||0;save();closeModal()}
-function openGoal(id=""){let g=db.goals.find(x=>x.id===id)||{};form(id?"Edit Savings Goal":"Savings Goal",`<label>Name</label><input id="gName" value="${esc(g.name||"")}" placeholder="Laptop"><div class="row"><div><label>Target</label><input id="gTarget" type="number" value="${g.target??0}"></div><div><label>Saved</label><input id="gCur" type="number" value="${g.current??0}"></div></div><label>Deadline</label><input id="gDue" type="date" value="${g.due||""}"><label>Note</label><input id="gNote" value="${esc(g.note||"")}">`,`saveGoal(${JSON.stringify(id)})`)}
-function saveGoal(id){let g=db.goals.find(x=>x.id===id);if(!g){g={id:uid()};db.goals.push(g)}g.name=$('gName').value||'Goal';g.target=+$('gTarget').value||0;g.current=+$('gCur').value||0;g.due=$('gDue').value;g.note=$('gNote').value;save();closeModal()}
-function openLabels(){modal(`<h2>Labels</h2><p class="muted">Use labels for trips, college, work, festivals, or any custom view without creating extra categories.</p><div class="row"><input id="newLabel" placeholder="New label"><button onclick="addLabel()">+ Add</button></div><div class="list">${db.labels.map(l=>`<div class="item"><b>${esc(l)}</b><button onclick="db.labels=db.labels.filter(x=>x!==${JSON.stringify(l)});save();openLabels()">×</button></div>`).join('')||'<p class="muted">No labels.</p>'}</div>`)}
-function addLabel(){let x=$('newLabel').value.trim();if(x&&!db.labels.includes(x))db.labels.push(x);save();openLabels()}
-function openCategoryManager(){modal(`<h2>Category Manager</h2><p class="muted">Add, rename, recolor or delete your own income/expense categories.</p><div class="section-title">Expense categories</div><div class="list">${db.expenseCats.map(c=>`<div class="item"><span>${c.icon} <b>${esc(c.name)}</b></span><span><button onclick="editCategory('expense','${c.name.replace(/'/g,"\\'")}')">Edit</button> <button onclick="deleteCategory('expense','${c.name.replace(/'/g,"\\'")}')">×</button></span></div>`).join('')}</div><button class="primary" onclick="categoryForm('expense')">+ Expense category</button><div class="section-title">Income categories</div><div class="list">${db.incomeCats.map(c=>`<div class="item"><span>${c.icon} <b>${esc(c.name)}</b></span><span><button onclick="editCategory('income','${c.name.replace(/'/g,"\\'")}')">Edit</button> <button onclick="deleteCategory('income','${c.name.replace(/'/g,"\\'")}')">×</button></span></div>`).join('')}</div><button class="primary" onclick="categoryForm('income')">+ Income category</button>`)}
-function categoryForm(type,old=""){let arr=type==='expense'?db.expenseCats:db.incomeCats,c=arr.find(x=>x.name===old)||{};form((old?'Edit ':'Add ')+(type==='expense'?'Expense':'Income')+' Category',`<label>Name</label><input id="cName" value="${esc(c.name||"")}"><div class="row"><div><label>Icon</label><input id="cIcon" value="${esc(c.icon||'•')}"></div><div><label>Color</label><input id="cColor" type="color" value="${c.color||'#eeeeee'}"></div></div>`,`saveCategory(${JSON.stringify(type)},${JSON.stringify(old)})`)}
-function editCategory(type,name){categoryForm(type,name)}
-function saveCategory(type,old){let arr=type==='expense'?db.expenseCats:db.incomeCats,name=$('cName').value.trim();if(!name)return;let c=arr.find(x=>x.name===old);if(!c){c={};arr.push(c)}c.name=name;c.icon=$('cIcon').value||'•';c.color=$('cColor').value;save();closeModal();openCategoryManager()}
-function deleteCategory(type,name){if(confirm(`Delete ${name}? Existing transactions remain but keep their old category name.`)){let arr=type==='expense'?db.expenseCats:db.incomeCats;let i=arr.findIndex(x=>x.name===name);if(i>=0)arr.splice(i,1);save();openCategoryManager()}}
-function showInsights(){let m=monthKey(),tx=db.tx.filter(t=>t.date?.startsWith(m)),exp=tx.filter(t=>t.type==='expense'),inc=tx.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0),spent=exp.reduce((s,t)=>s+t.amount,0),by={};exp.forEach(t=>by[t.cat]=(by[t.cat]||0)+t.amount);let vals=Object.entries(by).sort((a,b)=>b[1]-a[1]),max=vals[0]?.[1]||1,prevKey=months()[1],prev=db.tx.filter(t=>t.date?.startsWith(prevKey)&&t.type==='expense').reduce((s,t)=>s+t.amount,0);modal(`<h2>Charts & Insights</h2><div class="kpi"><div><span class="muted">Savings</span><strong class="green">${money(inc-spent)}</strong></div><div><span class="muted">Savings rate</span><strong>${inc?Math.round((inc-spent)/inc*100):0}%</strong></div><div><span class="muted">vs last month</span><strong class="${spent<=prev?'green':'red'}">${prev?Math.round((spent-prev)/prev*100):0}%</strong></div></div><p class="muted">Spending by category — ${esc(monthLabel(m))}</p><div class="chart">${vals.map(v=>`<div style="flex:1"><div class="col" style="height:${Math.max(4,v[1]/max*145)}px"></div><div class="legend">${esc(v[0].split(' ')[0])}</div></div>`).join('')||'<div class="empty">No expenses yet.</div>'}</div><div class="list">${vals.map(v=>`<div class="item"><b>${esc(v[0])}</b><span>${money(v[1])}</span></div>`).join('')||''}</div>`)}
-function showReports(){let ms=months().slice(0,6).reverse(),rows=ms.map(m=>{let i=db.tx.filter(t=>t.type==='income'&&t.date?.startsWith(m)).reduce((s,t)=>s+t.amount,0),e=db.tx.filter(t=>t.type==='expense'&&t.date?.startsWith(m)).reduce((s,t)=>s+t.amount,0);return [m,i,e]}),max=Math.max(...rows.map(r=>Math.max(r[1],r[2])),1);modal(`<h2>Reports & Cash Flow</h2><p class="muted">Income vs expenses for the last 6 months.</p><div class="chart">${rows.map(r=>`<div style="flex:1"><div class="col" style="height:${Math.max(4,r[1]/max*130)}px"></div><div class="legend">${r[0].slice(5)}</div></div>`).join('')}</div><div class="list">${rows.reverse().map(r=>`<div class="item"><b>${monthLabel(r[0])}</b><span><span class="green">+${money(r[1])}</span> · <span class="red">-${money(r[2])}</span></span></div>`).join('')}</div>`)}
-function showDebtPlan(){let rows=db.liabilities.map(l=>{let months=l.emi?Math.ceil(l.amount/l.emi):0;return `<div class="item"><div><b>${esc(l.name)}</b><br><span class="muted">${l.rate}% · EMI ${money(l.emi)}</span></div><div class="right">${money(l.amount)}<br><span class="muted">${months?months+' payments':'Set EMI'}</span></div></div>`}).join('');modal(`<h2>Debt Plan</h2><p class="muted">Simple estimate using current balance ÷ EMI; actual payoff is longer when interest is included.</p><div class="list">${rows||'<p class="muted">No liabilities.</p>'}</div>`)}
-function openDataTools(){modal(`<h2>Data & Privacy</h2><div class="success">Your data is stored locally in this browser. There is no bank connection or device tracking.</div><div class="section-title">Backup health</div><p>Transactions: <b>${db.tx.length}</b><br>Accounts: <b>${db.accounts.length}</b><br>Investments: <b>${db.investments.length}</b><br>Goals: <b>${db.goals.length}</b></p><p class="muted">For future Mac app support, keep your JSON backup files. The format is versioned so the data can be migrated later.</p><button class="primary" onclick="exportData()">Backup Everything</button>`)}
-function deleteBy(kind,id){db[kind]=db[kind].filter(x=>x.id!==id);save();}
-function editTx(id){let t=db.tx.find(x=>x.id===id);if(!t)return;if(t.type==='expense'){openExpense(t.cat);setTimeout(()=>{ $('fAmt').value=t.amount;$('fDesc').value=t.desc||'';$('fDate').value=t.date||today();$('fAcc').value=t.account||'';$('fLabel').value=t.label||'';$('fNote').value=t.note||'';document.querySelector('#modalBody button.primary').setAttribute('onclick',`updateTx(${JSON.stringify(id)},'expense')`)},0)}else if(t.type==='income'){openIncome(t.cat);setTimeout(()=>{$('iAmt').value=t.amount;$('iDesc').value=t.desc||'';$('iDate').value=t.date||today();$('iAcc').value=t.account||'';$('iLabel').value=t.label||'';$('iNote').value=t.note||'';document.querySelector('#modalBody button.primary').setAttribute('onclick',`updateTx(${JSON.stringify(id)},'income')`)},0)}}
-function updateTx(id,type){let t=db.tx.find(x=>x.id===id);if(!t)return;if(type==='expense'){t.amount=+$('fAmt').value||0;t.desc=$('fDesc').value;t.date=$('fDate').value;t.account=$('fAcc').value;t.label=$('fLabel').value;t.note=$('fNote').value}else{t.amount=+$('iAmt').value||0;t.desc=$('iDesc').value;t.date=$('iDate').value;t.account=$('iAcc').value;t.label=$('iLabel').value;t.note=$('iNote').value;t.cat=t.cat||$('iCat')?.value||'Other Income'}save();closeModal()}
-function renderAll(){renderHome();renderAccounts();renderTransactions();renderBudget()}
-function setupLongPress(el,type,name){let timer=null,fired=false;const start=()=>{fired=false;timer=setTimeout(()=>{fired=true;el.classList.add('long-pressed');openReorder(type)},550)};const cancel=()=>{if(timer)clearTimeout(timer);timer=null;el.classList.remove('long-pressed')};el.addEventListener('pointerdown',start);el.addEventListener('pointerup',()=>{if(!fired)openExpense(name);cancel()});el.addEventListener('pointercancel',cancel);el.addEventListener('pointerleave',cancel);el.addEventListener('contextmenu',e=>{e.preventDefault();openReorder(type)})}
-function openReorder(type){let arr=type==='expense'?db.expenseCats:db.incomeCats;let title=type==='expense'?'Reorder Expenses':'Reorder Income';modal(`<h2>${title}</h2><p class="muted">Long-press any Home category to open this. Use ↑ / ↓ to change its position.</p><div class="reorder-list" id="reorderList">${arr.map((c,i)=>`<div class="reorder-row"><span>${c.icon} <b>${esc(c.name)}</b></span><span class="actions"><button onclick="moveCategory('${type}',${i},-1)">↑</button><button onclick="moveCategory('${type}',${i},1)">↓</button></span></div>`).join('')}</div>`)}
-function moveCategory(type,index,delta){let arr=type==='expense'?db.expenseCats:db.incomeCats,n=index+delta;if(n<0||n>=arr.length)return;[arr[index],arr[n]]=[arr[n],arr[index]];save();openReorder(type)}
-function renderHome(){let m=monthKey(),tx=db.tx.filter(t=>t.date?.startsWith(m)),inc=tx.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0),spent=tx.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);$('homeIncome').textContent=money(inc);$('homeSpent').textContent=money(spent);$('homeFree').textContent=money(inc-spent);let cats=db.expenseCats;$('categoryGrid').innerHTML=cats.map(c=>{let s=tx.filter(t=>t.type==='expense'&&t.cat===c.name).reduce((x,t)=>x+t.amount,0);return `<div class="cat" style="background:${c.color}" data-cat-type="expense" data-cat-name="${esc(c.name)}"><b>${c.icon} ${esc(c.name)}</b><div class="amt">${money(s)}</div></div>`}).join('');$('incomeGrid').innerHTML=db.incomeCats.map(c=>{let s=tx.filter(t=>t.type==='income'&&t.cat===c.name).reduce((x,t)=>x+t.amount,0);return `<div class="cat income-cat" style="background:${c.color}" data-cat-type="income" data-cat-name="${esc(c.name)}"><b>${c.icon} ${esc(c.name)}</b><div class="amt">${money(s)}</div></div>`}).join('');document.querySelectorAll('#categoryGrid .cat').forEach(el=>setupLongPress(el,'expense',el.dataset.catName));document.querySelectorAll('#incomeGrid .cat').forEach(el=>{let timer=null,fired=false;const start=()=>{fired=false;timer=setTimeout(()=>{fired=true;el.classList.add('long-pressed');openReorder('income')},550)};const cancel=()=>{if(timer)clearTimeout(timer);timer=null;el.classList.remove('long-pressed')};el.addEventListener('pointerdown',start);el.addEventListener('pointerup',()=>{if(!fired)openIncome(el.dataset.catName);cancel()});el.addEventListener('pointercancel',cancel);el.addEventListener('pointerleave',cancel);el.addEventListener('contextmenu',e=>{e.preventDefault();openReorder('income')})});
-let fixed=db.autopay.filter(a=>a.fixedCost||a.cat==='Home Bills'||a.categoryType==='fixed');let upcoming=fixed.filter(a=>a.next).sort((a,b)=>a.next.localeCompare(b.next));let fixedTotal=fixed.reduce((s,a)=>s+(+a.amount||0),0);if(!fixed.length)$('fixedCostWarning').textContent='No fixed costs marked yet. Add recurring payments in Setting and mark fixed costs to watch them here.';else{$('fixedCostWarning').textContent=fixedTotal>inc&&inc>0?`Fixed costs of ${money(fixedTotal)} are higher than this month's recorded income of ${money(inc)}. Review them.`:`${money(fixedTotal)} in recurring fixed costs${upcoming.length?` · Next: ${upcoming[0].name} on ${upcoming[0].next}`:''}. Keep an eye on these before discretionary spending.`}let ups=db.autopay.filter(a=>a.next).sort((a,b)=>a.next.localeCompare(b.next)).slice(0,5);$('homeUpcoming').innerHTML=ups.map(a=>`<div class="item"><div><b>${esc(a.name)}</b><br><span class="muted">Due ${esc(a.next)} · ${esc(a.cat||'')}</span></div><b>${money(a.amount)}</b></div>`).join('')||'<div class="card muted">No upcoming recurring payments.</div>';let advice=ADVICE[Math.floor(Date.now()/86400000)%ADVICE.length];$('adviceTitle').textContent=advice[0];$('adviceText').textContent=advice[1]}
-function renderAccounts(){let cash=db.accounts.reduce((s,a)=>s+accountBalance(a),0),invest=db.investments.reduce((s,i)=>s+i.current,0),debt=db.liabilities.reduce((s,l)=>s+l.amount,0),nw=cash+invest-debt;$('netWorth').textContent=money(nw);$('heroSub').textContent=`Assets ${money(cash+invest)} · Liabilities ${money(debt)}`;$('assetCash').textContent=money(cash);$('assetInvest').textContent=money(invest);$('assetDebt').textContent=money(debt);$('accountList').innerHTML=db.accounts.map(a=>`<div class="item"><div><b>${esc(a.name)}</b><br><span class="muted">${esc(a.type)} · Opening ${money(a.opening)}</span></div><div class="right"><b>${money(accountBalance(a))}</b><br><button onclick="openAccount('${a.id}')">Edit</button> <button onclick="deleteBy('accounts','${a.id}')">×</button></div></div>`).join('')||'<div class="empty">No accounts yet.</div>';$('investmentList').innerHTML=db.investments.map(i=>{let g=i.current-i.invested;return `<div class="item"><div><b>${esc(i.name)}</b><br><span class="muted">${esc(i.type)} · Qty ${i.qty||0} ${i.broker?'· '+esc(i.broker):''}</span></div><div class="right"><b>${money(i.current)}</b><br><span class="${g>=0?'green':'red'}">${g>=0?'+':''}${money(g)}</span><br><button onclick="openInvestment('${i.id}')">Edit</button> <button onclick="deleteBy('investments','${i.id}')">×</button></div></div>`}).join('')||'<div class="empty">No investments yet.</div>';$('liabilityList').innerHTML=db.liabilities.map(l=>`<div class="item"><div><b>${esc(l.name)}</b><br><span class="muted">${l.rate}% · EMI ${money(l.emi)} · Due ${esc(l.due||'—')}</span></div><div class="right"><b class="red">${money(l.amount)}</b><br><button onclick="openLiability('${l.id}')">Edit</button> <button onclick="deleteBy('liabilities','${l.id}')">×</button></div></div>`).join('')||'<div class="empty">No liabilities.</div>'}
-function renderTransactions(){let sel=$('txMonth');if(sel.options.length!==18){sel.innerHTML=months().map(m=>`<option value="${m}" ${m===monthKey()?'selected':''}>${monthLabel(m)}</option>`).join('')}let q=($('searchTx').value||'').toLowerCase(),type=$('txType').value,m=$('txMonth').value||monthKey();let arr=db.tx.filter(t=>(!t.date||t.date.startsWith(m))&&(type==='all'||t.type===type)&&JSON.stringify(t).toLowerCase().includes(q)).slice(0,150);$('transactionList').innerHTML=arr.map(t=>`<div class="item"><div><b>${esc(t.desc||t.type)}</b><br><span class="muted">${esc(t.date||'')} ${t.cat?'· '+esc(t.cat):''} ${t.label?'· #'+esc(t.label):''}</span></div><div class="right"><b class="${t.type==='expense'?'red':t.type==='income'?'green':''}">${t.type==='expense'?'-':t.type==='income'?'+':''}${money(t.amount)}</b><br>${t.type!=='transfer'?`<button onclick="editTx('${t.id}')">Edit</button>`:''} <button onclick="deleteBy('tx','${t.id}')">×</button></div></div>`).join('')||'<div class="empty">No transactions.</div>'}
-function renderBudget(){let alloc=adjustedAlloc(),m=monthKey(),spentBy={};db.tx.filter(t=>t.type==='expense'&&t.date?.startsWith(m)).forEach(t=>spentBy[t.cat]=(spentBy[t.cat]||0)+t.amount);let total=Object.values(alloc).reduce((s,v)=>s+v,0),spent=Object.values(spentBy).reduce((s,v)=>s+v,0);$('budgetTotal').textContent=money(total);$('budgetSpent').textContent=money(spent);$('budgetRemain').textContent=money(total-spent);$('budgetList').innerHTML=Object.entries(alloc).map(([c,a])=>{let s=spentBy[c]||0,p=a>0?Math.min(100,s/a*100):0;let rule=db.budgets.find(b=>b.cat===c)?.rule||'derived';return `<div class="card"><div style="display:flex;justify-content:space-between"><b>${esc(c)}</b><span class="muted">${esc(rule)}</span></div><div style="display:flex;justify-content:space-between;margin:10px 0"><span>Spent ${money(s)}</span><span>Plan ${money(a)}</span></div><div class="bar"><i style="width:${p}%"></i></div>${s>a?`<p class="danger-text">Over budget by ${money(s-a)}</p>`:''}</div>`}).join('')||'<div class="empty">Add category budget rules to start planning.</div>';$('budgetTransfers').innerHTML=db.budgetTransfers.filter(t=>t.date?.startsWith(m)).slice(0,20).map(t=>`<div class="item"><div><b>${esc(t.from)} → ${esc(t.to)}</b><br><span class="muted">${esc(t.reason||'Budget transfer')} · ${esc(t.date)}</span></div><b>${money(t.amount)}</b></div>`).join('')||'<div class="card muted">No transfers this month.</div>'}
-function exportData(){let payload={...db,exportedAt:new Date().toISOString(),app:"Personal Budget PWA",backupVersion:2};let blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`budget-backup-${today()}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),500)}
-function exportCSV(){let rows=[['Date','Type','Category','Description','Amount','Account','Label','Note'],...db.tx.map(t=>[t.date||'',t.type,t.cat||'',t.desc||'',t.amount||0,db.accounts.find(a=>a.id===t.account)?.name||'',t.label||'',t.note||''])];let csv=rows.map(r=>r.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(',')).join('\n');let a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download=`transactions-${today()}.csv`;a.click()}
-function importData(e){let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{try{let x=JSON.parse(r.result);if(!x||!Array.isArray(x.tx)||!Array.isArray(x.accounts))throw Error();db=migrate(x);save();alert('Backup imported successfully.')}catch(err){alert('Invalid backup file.')}};r.readAsText(f);e.target.value=''}
-function resetData(){if(confirm('Delete ALL local financial data? Export a backup first if you may need it later.')){db=blank();save()}}
-if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
-renderAll();
+
+function localDate(d=new Date()){const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,"0"),day=String(d.getDate()).padStart(2,"0");return `${y}-${m}-${day}`}
+function monthKey(d=new Date()){return localDate(d).slice(0,7)}
+function uid(){return crypto.randomUUID?crypto.randomUUID():Date.now()+"-"+Math.random()}
+function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function money(n){return "₹"+Number(n||0).toLocaleString("en-IN",{maximumFractionDigits:2})}
+function load(){try{const x=JSON.parse(localStorage.getItem(KEY)); return x?normalize(x):normalize(structuredClone(DEFAULT))}catch{return normalize(structuredClone(DEFAULT))}}
+function normalize(x){
+  x={...structuredClone(DEFAULT),...x}; x.settings={...DEFAULT.settings,...(x.settings||{})};
+  x.settings.expenseOrder=x.settings.expenseOrder?.length?x.settings.expenseOrder:x.settings.expenseCats;
+  x.settings.incomeOrder=x.settings.incomeOrder?.length?x.settings.incomeOrder:x.settings.incomeCats;
+  x.tx=x.tx||[];x.accounts=x.accounts||[];x.investments=x.investments||[];x.autopay=x.autopay||[];x.goals=x.goals||[];x.liabilities=x.liabilities||[];
+  x.budget={...DEFAULT.budget,...(x.budget||{})};x.budget.cats=x.budget.cats||{};x.budget.transfers=x.budget.transfers||[];return x;
+}
+function save(){localStorage.setItem(KEY,JSON.stringify(db));render()}
+
+const appEl=document.getElementById("app");
+function render(){
+ const tab=window.currentTab||"home";
+ appEl.innerHTML=`<div class="app">
+  <header><div class="brand">💰 Personal Budget</div><div class="month">${new Date().toLocaleDateString("en-IN",{month:"long",year:"numeric"})}</div></header>
+  <main>${tab==="home"?home():tab==="accounts"?accounts():tab==="transactions"?transactions():tab==="budget"?budget():settings()}</main>
+  <nav class="bottom">
+   ${[["home","⌂","Home"],["accounts","◉","Account"],["transactions","≡","Transactions"],["budget","▣","Budget"],["settings","⚙","Setting"]].map(([t,i,l])=>`<button class="tab ${tab===t?"active":""}" onclick="go('${t}')"><span class="ico">${i}</span><small>${l}</small></button>`).join("")}
+  </nav>
+ </div>`;
+}
+function go(t){window.currentTab=t;render()}
+function card(title,body,cls="card"){return `<section class="${cls}"><h3>${title}</h3>${body}</section>`}
+
+function home(){
+ const m=monthKey(), ex=db.tx.filter(x=>x.type==="expense"&&x.date?.startsWith(m)), inc=db.tx.filter(x=>x.type==="income"&&x.date?.startsWith(m));
+ const spent=ex.reduce((a,x)=>a+Number(x.amount),0), income=inc.reduce((a,x)=>a+Number(x.amount),0), free=income-spent;
+ const eCats=db.settings.expenseOrder.filter(c=>db.settings.expenseCats.includes(c));
+ const iCats=db.settings.incomeOrder.filter(c=>db.settings.incomeCats.includes(c));
+ return `
+ ${card("Expense",`<div class="grid">${eCats.map(c=>catCard(c,"expense")).join("")}</div>`)}
+ ${card("Income",`<div class="grid">${iCats.map(c=>catCard(c,"income")).join("")}</div>`)}
+ ${card("This Month",`<div class="kpi"><div><small>Income</small><strong>${money(income)}</strong></div><div><small>Spent</small><strong>${money(spent)}</strong></div><div><small>Free</small><strong>${money(free)}</strong></div></div>`)}
+ ${fixedWarning()}
+ ${card("Upcoming",db.autopay.length?db.autopay.slice(0,3).map(a=>`<div class="item"><div><b>${esc(a.name)}</b><span>${esc(a.date||"")}${a.fixed?" · Fixed cost":""}</span></div><div class="right">${money(a.amount)}</div></div>`).join(""):`<p class="muted">No recurring payments added.</p>`)}
+ ${card("Financial tip",`<p>${tip()}</p>`)}
+ `;
+}
+function catCard(c,type){
+ const total=db.tx.filter(x=>x.type===type&&x.cat===c&&x.date?.startsWith(monthKey())).reduce((a,x)=>a+Number(x.amount),0);
+ return `<button class="cat" onclick="entry('${esc(c)}','${type}')" oncontextmenu="event.preventDefault();reorder('${type}')"><b>${esc(c)}</b><div class="amt">${money(total)}</div></button>`;
+}
+function fixedWarning(){
+ const fixed=db.autopay.filter(a=>a.fixed), total=fixed.reduce((s,a)=>s+Number(a.amount||0),0);
+ const income=db.tx.filter(x=>x.type==="income"&&x.date?.startsWith(monthKey())).reduce((s,x)=>s+Number(x.amount),0);
+ let msg=fixed.length?`<b>Watch fixed costs</b><br><span>${money(total)} recurring fixed costs${income?` · ${Math.round(total/income*100)}% of recorded income`:""}</span>`:"<b>Watch fixed costs</b><br><span>Add recurring payments and mark fixed costs to monitor them.</span>";
+ return `<section class="card warning">⚠️ ${msg}</section>`;
+}
+function tip(){return ["Pay yourself first—treat savings like a bill.","A budget is a plan, not a restriction.","Track recurring costs; small subscriptions compound.","Review your biggest spending category before cutting small ones.","Net worth matters more than any single month's spending."][new Date().getDate()%5]}
+
+function entry(cat,type){
+ const id="modal";document.getElementById(id)?.remove();
+ const date=localDate();
+ document.body.insertAdjacentHTML("beforeend",`<div class="modal" id="${id}" onclick="if(event.target===this)closeModal()"><div class="sheet">
+ <h2>Add ${type==="income"?"Income":"Expense"}</h2><label>Amount</label><input id="amt" type="number" inputmode="decimal" min="0" step="0.01" placeholder="₹0">
+ <label>Description</label><input id="desc" placeholder="${esc(cat)}">
+ <label>Date</label><input id="date" type="date" value="${date}">
+ <label>Account</label><select id="acc"><option value="">Unassigned</option>${db.accounts.map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join("")}</select>
+ <label>Note</label><input id="note" placeholder="Optional">
+ <div class="actions"><button onclick="closeModal()">Cancel</button><button onclick="saveEntry('${esc(cat)}','${type}')">Save</button></div>
+ </div></div>`);
+ document.getElementById("amt").focus();
+}
+function saveEntry(cat,type){
+ const amount=Number(document.getElementById("amt").value); if(!amount||amount<=0)return alert("Enter an amount greater than ₹0.");
+ db.tx.unshift({id:uid(),type,cat,amount,desc:document.getElementById("desc").value.trim()||cat,date:document.getElementById("date").value||localDate(),account:document.getElementById("acc").value,note:document.getElementById("note").value.trim()});
+ closeModal();save();
+}
+function closeModal(){document.getElementById("modal")?.remove()}
+
+function accounts(){
+ const net=netWorth();
+ return `<div class="hero"><div class="label">Net Worth</div><div class="value">${money(net)}</div><small>Assets ${money(assets())} · Liabilities ${money(liabilities())}</small></div>
+ ${card("Accounts",`<button class="primary" onclick="accountForm()">＋ Add Account</button><div class="list">${db.accounts.map(a=>`<div class="item"><div><b>${esc(a.name)}</b><span>${esc(a.type||"Account")}</span></div><div class="right">${money(accountBalance(a))}<br><button onclick="accountForm('${a.id}')">Edit</button> <button onclick="del('accounts','${a.id}')">Delete</button></div></div>`).join("")||`<p class="muted">No accounts yet.</p>`}</div>`)}
+ ${card("Investments",`<button class="primary" onclick="investmentForm()">＋ Add Investment</button><div class="list">${db.investments.map(i=>`<div class="item"><div><b>${esc(i.name)}</b><span>${esc(i.type)} · ${i.qty?esc(i.qty)+" units · ":""}Invested ${money(i.invested)}</span></div><div class="right">${money(i.current)}<br><button onclick="investmentForm('${i.id}')">Edit</button> <button onclick="del('investments','${i.id}')">Delete</button></div></div>`).join("")||`<p class="muted">No investments yet.</p>`}</div>`)}
+ ${card("Liabilities",`<button class="primary" onclick="liabilityForm()">＋ Add Liability</button>${db.liabilities.map(l=>`<div class="item"><div><b>${esc(l.name)}</b><span>${esc(l.type||"Debt")}</span></div><div class="right">${money(l.amount)} <button onclick="del('liabilities','${l.id}')">Delete</button></div></div>`).join("")||`<p class="muted">No liabilities.</p>`}`)}
+ `;
+}
+function assets(){return db.accounts.reduce((s,a)=>s+accountBalance(a),0)+db.investments.reduce((s,i)=>s+Number(i.current||0),0)}
+function liabilities(){return db.liabilities.reduce((s,l)=>s+Number(l.amount||0),0)}
+function netWorth(){return assets()-liabilities()}
+function accountBalance(a){
+ let b=Number(a.opening||0);
+ db.tx.forEach(x=>{if(x.account===a.id)b+=x.type==="income"?Number(x.amount):x.type==="expense"?-Number(x.amount):0});
+ return b;
+}
+function formModal(title,fields,saveFn){
+ document.getElementById("modal")?.remove();
+ document.body.insertAdjacentHTML("beforeend",`<div class="modal" id="modal" onclick="if(event.target===this)closeModal()"><div class="sheet"><h2>${title}</h2>${fields}<div class="actions"><button onclick="closeModal()">Cancel</button><button onclick="${saveFn}">Save</button></div></div></div>`);
+}
+function field(id,label,val="",type="text",extra=""){return `<label>${label}</label><input id="${id}" type="${type}" value="${esc(val)}" ${extra}>`}
+function accountForm(id){
+ const a=db.accounts.find(x=>x.id===id)||{};
+ formModal(id?"Edit Account":"Add Account",
+ `${field("aName","Name",a.name||"")}${field("aType","Type",a.type||"Bank")}${field("aOpening","Opening Balance",a.opening||0,"number",'inputmode="decimal" step="0.01"')}`,
+ `saveAccount('${id||""}')`);
+}
+function saveAccount(id){
+ const name=document.getElementById("aName").value.trim(); if(!name)return alert("Enter account name.");
+ const obj={id:id||uid(),name,type:document.getElementById("aType").value.trim()||"Bank",opening:Number(document.getElementById("aOpening").value||0)};
+ if(id){const i=db.accounts.findIndex(x=>x.id===id);db.accounts[i]=obj}else db.accounts.push(obj);closeModal();save();
+}
+function investmentForm(id){
+ const x=db.investments.find(i=>i.id===id)||{};
+ formModal(id?"Edit Investment":"Add Investment",
+ `${field("iName","Name",x.name||"")}${field("iType","Type",x.type||"Stock")}${field("iQty","Quantity / Units",x.qty||"","number",'inputmode="decimal" step="0.0001"')}${field("iInv","Invested Amount",x.invested||0,"number",'inputmode="decimal" step="0.01"')}${field("iCur","Current Value",x.current||0,"number",'inputmode="decimal" step="0.01"')}${field("iBroker","Broker / Provider",x.broker||"")}${field("iNote","Note",x.note||"")}`,
+ `saveInvestment('${id||""}')`);
+}
+function saveInvestment(id){
+ const name=document.getElementById("iName").value.trim();if(!name)return alert("Enter investment name.");
+ const obj={id:id||uid(),name,type:document.getElementById("iType").value.trim()||"Other",qty:Number(document.getElementById("iQty").value||0),invested:Number(document.getElementById("iInv").value||0),current:Number(document.getElementById("iCur").value||0),broker:document.getElementById("iBroker").value.trim(),note:document.getElementById("iNote").value.trim()};
+ if(id)db.investments[db.investments.findIndex(x=>x.id===id)]=obj;else db.investments.push(obj);closeModal();save();
+}
+function liabilityForm(){
+ formModal("Add Liability",`${field("lName","Name")}${field("lType","Type","Credit Card")}${field("lAmt","Outstanding Amount",0,"number",'inputmode="decimal" step="0.01"')}`,`saveLiability()`);
+}
+function saveLiability(){const name=document.getElementById("lName").value.trim();if(!name)return alert("Enter a name.");db.liabilities.push({id:uid(),name,type:document.getElementById("lType").value.trim(),amount:Number(document.getElementById("lAmt").value||0)});closeModal();save()}
+function del(arr,id){if(!confirm("Delete this item?"))return;db[arr]=db[arr].filter(x=>x.id!==id);save()}
+
+function transactions(){
+ const rows=db.tx.slice(0,100).map(x=>`<div class="item"><div><b>${esc(x.desc||x.cat||x.type)}</b><span>${esc(x.date)} · ${esc(x.cat||x.type)}</span></div><div class="right">${x.type==="expense"?"−":"+"}${money(x.amount)}<br><button onclick="editTx('${x.id}')">Edit</button> <button onclick="del('tx','${x.id}')">Delete</button></div></div>`).join("");
+ return `${card("Transactions",rows||`<p class="muted">No transactions yet.</p>`)}`
+}
+function editTx(id){
+ const x=db.tx.find(t=>t.id===id);if(!x)return;
+ formModal("Edit Transaction",`${field("eAmt","Amount",x.amount,"number",'inputmode="decimal" step="0.01"')}${field("eDesc","Description",x.desc||x.cat||"")}${field("eDate","Date",x.date||localDate(),"date")}`,`saveTx('${id}')`);
+}
+function saveTx(id){const x=db.tx.find(t=>t.id===id);x.amount=Number(document.getElementById("eAmt").value||0);x.desc=document.getElementById("eDesc").value;x.date=document.getElementById("eDate").value||localDate();closeModal();save()}
+
+function budget(){
+ const m=monthKey();let total=db.budget.overall||0;
+ const cats=[...new Set([...db.settings.expenseOrder,...Object.keys(db.budget.cats)])];
+ return `${card("Monthly Budget",`${field("overall","Overall Budget",total,"number",'inputmode="decimal" step="0.01"')}<button class="primary" onclick="setOverall()">Save Overall Budget</button><p class="muted">You can allocate fixed, minimum, or remaining-budget amounts to categories.</p>`)}
+ ${card("Category Budgets",cats.map(c=>{const b=db.budget.cats[c]||{mode:"remaining",amount:0};return `<div class="item"><div><b>${esc(c)}</b><span>${esc(b.mode)} · ${money(b.amount)}</span></div><button onclick="catBudget('${esc(c)}')">Edit</button></div>`}).join(""))}
+ ${card("Transfer Budget",`<button class="primary" onclick="transferForm()">Move money between categories</button>${db.budget.transfers.slice(-10).reverse().map(t=>`<div class="item"><span>${esc(t.from)} → ${esc(t.to)}</span><b>${money(t.amount)}</b></div>`).join("")}`)}
+ `;
+}
+function setOverall(){db.budget.overall=Number(document.getElementById("overall").value||0);db.budget.month=monthKey();save()}
+function catBudget(c){
+ const b=db.budget.cats[c]||{mode:"remaining",amount:0};
+ formModal("Budget: "+c,`<label>Mode</label><select id="bm"><option ${b.mode==="fixed"?"selected":""}>fixed</option><option ${b.mode==="minimum"?"selected":""}>minimum</option><option ${b.mode==="remaining"?"selected":""}>remaining</option></select>${field("ba","Amount",b.amount||0,"number",'inputmode="decimal" step="0.01"')}`,`saveCatBudget('${esc(c)}')`);
+}
+function saveCatBudget(c){db.budget.cats[c]={mode:document.getElementById("bm").value,amount:Number(document.getElementById("ba").value||0)};closeModal();save()}
+function transferForm(){
+ const cats=db.settings.expenseCats;
+ formModal("Transfer Budget",`<label>From</label><select id="tf">${cats.map(c=>`<option>${esc(c)}</option>`).join("")}</select><label>To</label><select id="tt">${cats.map(c=>`<option>${esc(c)}</option>`).join("")}</select>${field("tv","Amount",0,"number",'inputmode="decimal" step="0.01"')}`,`saveTransfer()`);
+}
+function saveTransfer(){const from=document.getElementById("tf").value,to=document.getElementById("tt").value,amount=Number(document.getElementById("tv").value||0);if(from===to||amount<=0)return alert("Choose different categories and enter a valid amount.");const f=db.budget.cats[from]||{mode:"fixed",amount:0},t=db.budget.cats[to]||{mode:"fixed",amount:0};f.amount=Math.max(0,Number(f.amount)-amount);t.amount=Number(t.amount)+amount;db.budget.cats[from]=f;db.budget.cats[to]=t;db.budget.transfers.push({id:uid(),from,to,amount,date:localDate()});closeModal();save()}
+
+function settings(){
+ return `${card("Categories",`<p class="muted">Create and reorder your income and expense categories.</p><button class="primary" onclick="categoryManager('expense')">Manage Expense Categories</button> <button class="primary" onclick="categoryManager('income')">Manage Income Categories</button>`)}
+ ${card("Autopay / Recurring",`<button class="primary" onclick="autopayForm()">＋ Add Autopay</button>${db.autopay.map(a=>`<div class="item"><div><b>${esc(a.name)}</b><span>${esc(a.frequency||"Monthly")}${a.fixed?" · Fixed cost":""}</span></div><div class="right">${money(a.amount)} <button onclick="del('autopay','${a.id}')">Delete</button></div></div>`).join("")}`)}
+ ${card("Savings Goals",`<button class="primary" onclick="goalForm()">＋ Add Goal</button>${db.goals.map(g=>`<div class="item"><div><b>${esc(g.name)}</b><span>${money(g.saved)} / ${money(g.target)}</span></div><button onclick="del('goals','${g.id}')">Delete</button></div>`).join("")}`)}
+ ${card("Backup & Import",`<button class="primary" onclick="exportJSON()">Export JSON Backup</button><button onclick="document.getElementById('jsonIn').click()">Import JSON</button><input id="jsonIn" type="file" accept=".json,application/json" hidden onchange="importJSON(event)"><br><button onclick="exportCSV()">Export Transactions CSV</button><button onclick="csvHelp()">CSV templates</button><p class="muted">JSON preserves the complete local database. CSV is for bulk transaction entry/export.</p>`)}
+ ${card("Data",`<button onclick="alert('Stored locally on this device/browser. No bank or device tracking is used by this app.')">Privacy info</button><button onclick="if(confirm('Delete ALL local data?')){localStorage.removeItem(KEY);location.reload()}">Reset all data</button>`)}
+ `;
+}
+function categoryManager(type){
+ const isE=type==="expense", key=isE?"expenseCats":"incomeCats", orderKey=isE?"expenseOrder":"incomeOrder";
+ formModal("Manage "+(isE?"Expense":"Income")+" Categories",`<div id="catList">${db.settings[orderKey].filter(c=>db.settings[key].includes(c)).map(c=>`<div class="item"><b>${esc(c)}</b><span><button onclick="moveCat('${type}','${esc(c)}',-1)">↑</button><button onclick="moveCat('${type}','${esc(c)}',1)">↓</button><button onclick="renameCat('${type}','${esc(c)}')">Rename</button><button onclick="removeCat('${type}','${esc(c)}')">Delete</button></span></div>`).join("")}</div><hr>${field("newCat","New Category")}<button onclick="addCat('${type}')">Add</button>`,`closeModal()`);
+}
+function reorder(type){categoryManager(type)}
+function addCat(type){const id="newCat",n=document.getElementById(id)?.value.trim();if(!n)return;const key=type==="expense"?"expenseCats":"incomeCats",ok=type==="expense"?"expenseOrder":"incomeOrder";if(!db.settings[key].includes(n)){db.settings[key].push(n);db.settings[ok].push(n);save();}categoryManager(type)}
+function moveCat(type,c,dir){const k=type==="expense"?"expenseOrder":"incomeOrder",a=db.settings[k],i=a.indexOf(c),j=i+dir;if(i<0||j<0||j>=a.length)return;[a[i],a[j]]=[a[j],a[i]];save();categoryManager(type)}
+function renameCat(type,c){const n=prompt("New category name",c)?.trim();if(!n||n===c)return;const key=type==="expense"?"expenseCats":"incomeCats",ok=type==="expense"?"expenseOrder":"incomeOrder";db.settings[key]=db.settings[key].map(x=>x===c?n:x);db.settings[ok]=db.settings[ok].map(x=>x===c?n:x);db.tx.forEach(x=>{if(x.cat===c)x.cat=n});save();categoryManager(type)}
+function removeCat(type,c){if(!confirm(`Delete category "${c}"? Existing transactions will stay.`))return;const key=type==="expense"?"expenseCats":"incomeCats",ok=type==="expense"?"expenseOrder":"incomeOrder";db.settings[key]=db.settings[key].filter(x=>x!==c);db.settings[ok]=db.settings[ok].filter(x=>x!==c);save();categoryManager(type)}
+
+function autopayForm(){
+ formModal("Add Autopay",`${field("pName","Name")}${field("pAmt","Amount",0,"number",'inputmode="decimal" step="0.01"')}${field("pFreq","Frequency","Monthly")}${field("pDate","Next Date",localDate(),"date")}<label><input id="pFixed" type="checkbox"> Mark as fixed cost</label>`,`saveAutopay()`);
+}
+function saveAutopay(){const name=document.getElementById("pName").value.trim();if(!name)return alert("Enter a name.");db.autopay.push({id:uid(),name,amount:Number(document.getElementById("pAmt").value||0),frequency:document.getElementById("pFreq").value,date:document.getElementById("pDate").value,fixed:document.getElementById("pFixed").checked});closeModal();save()}
+function goalForm(){formModal("Add Savings Goal",`${field("gName","Goal")}${field("gTarget","Target Amount",0,"number",'inputmode="decimal" step="0.01"')}${field("gSaved","Already Saved",0,"number",'inputmode="decimal" step="0.01"')}`,`saveGoal()`)}
+function saveGoal(){const name=document.getElementById("gName").value.trim();if(!name)return alert("Enter a goal.");db.goals.push({id:uid(),name,target:Number(document.getElementById("gTarget").value||0),saved:Number(document.getElementById("gSaved").value||0)});closeModal();save()}
+
+function exportJSON(){const blob=new Blob([JSON.stringify(db,null,2)],{type:"application/json"});download(blob,`personal-budget-backup-${localDate()}.json`)}
+function importJSON(e){const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const x=normalize(JSON.parse(r.result));if(!confirm("Replace current local data with this backup?"))return;db=x;save();alert("Backup restored.");}catch{alert("Invalid backup file.")}};r.readAsText(f)}
+function csvEscape(v){return `"${String(v??"").replace(/"/g,'""')}"`}
+function exportCSV(){const rows=[["date","type","category","description","amount","account","note"],...db.tx.map(x=>[x.date,x.type,x.cat||"",x.desc||"",x.amount,x.account||"",x.note||""])];download(new Blob([rows.map(r=>r.map(csvEscape).join(",")).join("\n")],{type:"text/csv"}),`transactions-${localDate()}.csv`)}
+function download(blob,name){const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+function csvHelp(){alert("CSV export format: date,type,category,description,amount,account,note. For bulk entry, fill these columns in Excel/Sheets and use it as your transaction source. Full restore should use JSON Backup.")}
+
+render();

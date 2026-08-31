@@ -30,7 +30,25 @@ input,select{min-width:0;width:100%;font-size:16px;padding:11px}
 .modal{padding:0}.sheet label{display:block;margin-top:9px;margin-bottom:4px;font-size:13px;font-weight:650}
 .chart{gap:4px;overflow:hidden}.legend{font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @media(min-width:431px){body{background:#ececf1}.app{background:var(--bg);box-shadow:0 0 30px #00000012}}
-</style></head><body><div class="app">
+</style>
+<style>
+:root{--bg:#f7f7f8;--card:#fff;--text:#151515;--muted:#777;--line:#e7e7ea;--accent:#111;--warn:#fff4cf}
+*{box-sizing:border-box}html,body{margin:0;width:100%;min-height:100%;overflow-x:hidden}body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",Inter,Arial,sans-serif;background:#eee;color:var(--text);-webkit-text-size-adjust:100%}
+button,input,select{font:inherit}button{cursor:pointer;border:1px solid var(--line);background:#fff;border-radius:12px;padding:9px 11px;color:inherit}button:active{transform:scale(.98)}
+.app{width:100%;max-width:430px;min-height:100vh;margin:auto;background:var(--bg);padding-bottom:95px}
+header{display:flex;justify-content:space-between;align-items:center;padding:16px 14px 8px}.brand{font-size:20px;font-weight:750}.month{font-size:13px;color:var(--muted)}
+main{padding:3px 12px}.card,.hero{background:var(--card);border:1px solid var(--line);border-radius:19px;padding:14px;margin:9px 0;overflow:hidden}.card h3{font-size:17px;margin:0 0 10px}.hero{padding:20px}.hero .label{color:var(--muted);font-size:14px}.hero .value{font-size:36px;font-weight:800;margin:5px 0}.hero small{color:var(--muted)}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.cat{min-width:0;text-align:left;min-height:74px;padding:12px;border-radius:16px;background:#fafafa}.cat b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.cat .amt{font-size:19px;font-weight:750;margin-top:11px}
+.kpi{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.kpi>div{min-width:0;padding:10px 5px;background:#fafafa;border-radius:13px;text-align:center}.kpi small{display:block;color:var(--muted);font-size:11px}.kpi strong{display:block;font-size:15px;margin-top:4px;white-space:nowrap}
+.warning{background:var(--warn);border-color:#f1dfa0}.warning span{color:#6e5b17;font-size:13px}
+.item{display:flex;align-items:center;justify-content:space-between;gap:9px;padding:10px 0;border-bottom:1px solid var(--line);min-width:0}.item:last-child{border-bottom:0}.item>div:first-child{min-width:0}.item b,.item span{display:block;overflow-wrap:anywhere}.item span,.muted{color:var(--muted);font-size:12px}.right{flex-shrink:0;text-align:right}.right button{font-size:11px;padding:5px 7px}
+.primary{background:#111;color:#fff;border-color:#111;margin:3px 3px 7px 0}.actions{display:flex;gap:8px;margin-top:15px}.actions button{flex:1}.list{margin-top:4px}
+.bottom{position:fixed;z-index:20;bottom:7px;left:50%;transform:translateX(-50%);width:calc(100% - 18px);max-width:414px;background:rgba(255,255,255,.96);border:1px solid var(--line);border-radius:23px;padding:5px;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));box-shadow:0 8px 30px #00000015;backdrop-filter:blur(15px)}.tab{border:0;background:transparent;padding:5px 2px;min-width:0}.tab.active{background:#111;color:#fff;border-radius:17px}.tab .ico{display:block;font-size:19px;line-height:20px}.tab small{font-size:9px;display:block;margin-top:1px}
+.modal{position:fixed;z-index:50;inset:0;background:#0005;display:flex;align-items:flex-end}.sheet{width:100%;max-width:430px;margin:auto 0 0;background:#fff;border-radius:24px 24px 0 0;padding:17px 15px calc(20px + env(safe-area-inset-bottom));max-height:92vh;overflow:auto}.sheet h2{margin:0 0 10px;font-size:21px}.sheet label{display:block;font-size:12px;font-weight:650;margin:8px 0 4px}.sheet input:not([type=checkbox]),.sheet select{width:100%;padding:11px;border:1px solid #ddd;border-radius:12px;background:#fff;font-size:16px;min-width:0}.sheet input[type=checkbox]{width:18px;height:18px;vertical-align:middle}
+hr{border:0;border-top:1px solid var(--line);margin:14px 0}
+@media(min-width:431px){body{background:#e9e9ec}.app{box-shadow:0 0 35px #0001}}
+</style>
+</head><body><div id="app"></div><div class="app">
 <header><div class="brand">💰 Budget</div><div class="month" id="monthLabel"></div></header><main>
 <section id="home" class="screen active">
 <div class="section-title">Expenses</div><div class="grid" id="categoryGrid"></div>

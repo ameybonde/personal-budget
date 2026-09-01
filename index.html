@@ -35,9 +35,9 @@ main{padding:4px 12px}
 .kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
 .kpi>div{background:#f6f6f9;border-radius:14px;padding:10px 5px;text-align:center;min-width:0}
 .kpi strong{font-size:17px;display:block;margin-top:4px;white-space:nowrap}
-.row{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:start}
-.row>div{min-width:0;width:100%}
-.row input, .row select{width:100%;box-sizing:border-box}
+.row{display:flex;flex-direction:column;gap:0;width:100%}
+.row>div{width:100%;min-width:0}
+.row input, .row select{width:100%;max-width:100%;box-sizing:border-box}
 .actions{display:flex;gap:6px;flex-wrap:wrap}
 button,input,select,textarea{font:inherit}
 button{border:0;border-radius:15px;padding:10px 9px;background:var(--lav);color:var(--purple);font-weight:680;cursor:pointer;flex:1;min-width:0}

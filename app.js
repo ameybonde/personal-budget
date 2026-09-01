@@ -1388,14 +1388,69 @@ function showTab(id) {
 if (navigator.storage && navigator.storage.persist) {
   navigator.storage.persist().catch(() => {});
 }
+// --- Theme & Background Customization Engine ---
+const THEME_PRESETS = [
+  { name: "Default Soft", color: "#f8f8fb" },
+  { name: "Warm Linen", color: "#fbf8f3" },
+  { name: "Mint Foam", color: "#f2f8f5" },
+  { name: "Ice Blue", color: "#f1f5fa" },
+  { name: "Blush Rose", color: "#faf2f4" },
+  { name: "Lavender", color: "#f5f3fc" },
+  { name: "Slate Grey", color: "#f0f2f5" },
+  { name: "Pure White", color: "#ffffff" }
+];
+
+function applyTheme(color) {
+  const bg = color || db.settings?.bgColor || "#f8f8fb";
+  document.documentElement.style.setProperty("--bg", bg);
+}
+
+function openThemeCustomizer() {
+  const current = db.settings?.bgColor || "#f8f8fb";
+  const html = `
+    <label>Choose Preset Background</label>
+    <div class="color-presets">
+      ${THEME_PRESETS.map(p => `
+        <div class="color-swatch ${p.color === current ? 'active' : ''}" 
+             style="background:${p.color};border:1px solid #ddd;" 
+             onclick="selectPresetBg('${p.color}')">
+          <small style="font-size:10px;font-weight:600;color:#555">${esc(p.name)}</small>
+        </div>
+      `).join('')}
+    </div>
+    <label style="margin-top:14px">Or Custom Hex Color</label>
+    <input type="color" id="customBgColor" value="${current}" oninput="previewBg(this.value)">
+  `;
+
+  openFormModal("App Background Theme", html, () => {
+    const selected = $("customBgColor").value;
+    db.settings.bgColor = selected;
+    applyTheme(selected);
+    save();
+    closeModal();
+  });
+}
+
+function selectPresetBg(color) {
+  if ($("customBgColor")) $("customBgColor").value = color;
+  previewBg(color);
+  document.querySelectorAll(".color-swatch").forEach(el => el.classList.toggle("active", el.style.backgroundColor === color));
+}
+
+function previewBg(color) {
+  document.documentElement.style.setProperty("--bg", color);
+}
+
 
 window.addEventListener("DOMContentLoaded", () => {
+  applyTheme(db.settings?.bgColor);
   handleDurationChange();
   document.querySelectorAll(".tab").forEach(b => {
     b.onclick = () => showTab(b.dataset.tab);
   });
   renderAll();
 });
+
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => {});

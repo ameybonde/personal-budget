@@ -1,10 +1,18 @@
 /**
- * Personal Budget PWA — v7.3 Logic Engine (Part 1/2)
- * Features: Category-Specific Labels, Safe Storage, Full CRUD
+ * Personal Budget PWA — v7.6 Logic Engine (Part 1/2)
+ * Features: Currency Engine, Flexible Duration Summaries, Safe Persistence
  */
 
 const STORAGE_KEY = "personal-budget-db";
 const LEGACY_KEYS = ["personalBudgetLocalV2", "pb_v6", "pb_v5", "pb_v4", "pb_v3", "pb_v2", "pb_v1"];
+
+const CURRENCIES = {
+  INR: { symbol: "₹", locale: "en-IN", name: "INR (₹) - Indian Rupee" },
+  GBP: { symbol: "£", locale: "en-GB", name: "GBP (£) - British Pound" },
+  USD: { symbol: "$", locale: "en-US", name: "USD ($) - US Dollar" },
+  EUR: { symbol: "€", locale: "de-DE", name: "EUR (€) - Euro" },
+  AED: { symbol: "AED ", locale: "ar-AE", name: "AED (د.إ) - UAE Dirham" }
+};
 
 const DEFAULT_EXP = [
   { name: "Markets", icon: "🎯", color: "#e8dcff" },
@@ -71,6 +79,10 @@ function migrate(x) {
   if (!x || typeof x !== "object") return b;
   Object.assign(b, x);
   b.version = 7;
+  b.settings = { ...b.settings, ...(x.settings || {}) };
+  if (!b.settings.currency || !CURRENCIES[b.settings.currency]) {
+    b.settings.currency = "INR";
+  }
   b.expenseCats = Array.isArray(x.expenseCats) && x.expenseCats.length ? x.expenseCats : DEFAULT_EXP;
   b.incomeCats = Array.isArray(x.incomeCats) && x.incomeCats.length ? x.incomeCats : DEFAULT_INC;
   b.tx = Array.isArray(x.tx) ? x.tx : [];
@@ -81,14 +93,11 @@ function migrate(x) {
   b.budgetTransfers = Array.isArray(x.budgetTransfers) ? x.budgetTransfers : [];
   b.autopay = Array.isArray(x.autopay) ? x.autopay : [];
   b.goals = Array.isArray(x.goals) ? x.goals : [];
-  
-  // Normalize labels (supports legacy array of strings)
   if (Array.isArray(x.labels)) {
     b.labels = x.labels.map(l => typeof l === "string" ? { name: l, cat: "" } : l);
   } else {
     b.labels = DEFAULT_LABELS;
   }
-
   b.rollovers = Array.isArray(x.rollovers) ? x.rollovers : [];
   return b;
 }
@@ -122,7 +131,10 @@ function save() {
 }
 
 function money(n) {
-  return "₹" + Math.round(Number(n) || 0).toLocaleString("en-IN");
+  const code = db.settings?.currency || "INR";
+  const conf = CURRENCIES[code] || CURRENCIES.INR;
+  const num = Math.round(Number(n) || 0);
+  return conf.symbol + num.toLocaleString(conf.locale);
 }
 
 function esc(s) {
@@ -152,17 +164,22 @@ function monthKey(d = today()) {
 
 function monthLabel(k = monthKey()) {
   let [y, m] = k.split("-");
-  return new Date(+y, +m - 1, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+  return new Date(+y, +m - 1, 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
 }
 
 function months() {
   let out = [], d = new Date();
-  for (let i = 0; i < 18; i++) {
+  for (let i = 0; i < 24; i++) {
     let k = localDate(d).slice(0, 7);
     out.push(k);
     d.setMonth(d.getMonth() - 1);
   }
   return out;
+}
+
+function years() {
+  let currentYear = new Date().getFullYear();
+  return [currentYear, currentYear - 1, currentYear - 2, currentYear - 3];
 }
 
 function modal(html) {
@@ -205,10 +222,35 @@ function labelOptions(category = "", selected = "") {
   return filtered.map(l => `<option value="${esc(l.name)}" ${l.name === selected ? 'selected' : ''}>#${esc(l.name)}</option>`).join("");
 }
 
+// --- Currency Selector ---
+function openCurrencySelector() {
+  const current = db.settings?.currency || "INR";
+  const html = `
+    <label>Select Preferred Currency</label>
+    <select id="currencySelect">
+      ${Object.entries(CURRENCIES).map(([code, item]) => `
+        <option value="${code}" ${code === current ? 'selected' : ''}>${esc(item.name)}</option>
+      `).join('')}
+    </select>
+    <p class="muted" style="font-size:12px">All financial amounts, budgets, and balance totals will format with this currency symbol automatically.</p>
+  `;
+
+  openFormModal("Change Currency", html, () => {
+    const selected = $("currencySelect").value;
+    if (CURRENCIES[selected]) {
+      db.settings.currency = selected;
+      save();
+      closeModal();
+    }
+  });
+}
+
+// --- Entry Form Implementations ---
 function openExpense(catName) {
+  const symbol = CURRENCIES[db.settings?.currency || "INR"].symbol;
   const html = `
     <span class="pill">${esc(catName)}</span>
-    <label>Amount (₹) *</label>
+    <label>Amount (${symbol}) *</label>
     <input id="fAmt" type="number" step="any" min="0.01" inputmode="decimal" placeholder="0.00" autofocus>
     <label>Description</label>
     <input id="fDesc" placeholder="${esc(catName)}">
@@ -255,13 +297,14 @@ function openExpense(catName) {
 function openIncome(catName = "") {
   const cats = db.incomeCats;
   const initialCat = catName || cats[0]?.name || "Salary";
+  const symbol = CURRENCIES[db.settings?.currency || "INR"].symbol;
   
   const html = `
     ${catName ? `<span class="pill">${esc(catName)}</span>` : `
       <label>Category</label>
       <select id="iCat" onchange="updateIncomeLabels()">${cats.map(c => `<option value="${esc(c.name)}" ${c.name === initialCat ? 'selected' : ''}>${esc(c.name)}</option>`).join("")}</select>
     `}
-    <label>Amount (₹) *</label>
+    <label>Amount (${symbol}) *</label>
     <input id="iAmt" type="number" step="any" min="0.01" inputmode="decimal" placeholder="0.00" autofocus>
     <label>Source / Description</label>
     <input id="iDesc" placeholder="Salary / allowance / payout">
@@ -318,6 +361,7 @@ function openQuickIncome() {
 
 function openAccount(editId = "") {
   const a = db.accounts.find(x => x.id === editId) || {};
+  const symbol = CURRENCIES[db.settings?.currency || "INR"].symbol;
   const html = `
     <label>Account Name *</label>
     <input id="aName" value="${esc(a.name || "")}" placeholder="Bank / Cash / Wallet" autofocus>
@@ -325,7 +369,7 @@ function openAccount(editId = "") {
     <select id="aType">
       ${["Bank", "Cash", "Wallet", "Credit Card", "Broker", "Other"].map(x => `<option value="${x}" ${a.type === x ? 'selected' : ''}>${x}</option>`).join("")}
     </select>
-    <label>Opening Balance (₹)</label>
+    <label>Opening Balance (${symbol})</label>
     <input id="aBal" type="number" step="any" value="${a.opening ?? 0}">
     <label>Note</label>
     <input id="aNote" value="${esc(a.note || "")}">
@@ -367,12 +411,13 @@ function accountBalance(a) {
 
 function openTransfer() {
   if (db.accounts.length < 2) return alert("Add at least two accounts to execute transfers.");
+  const symbol = CURRENCIES[db.settings?.currency || "INR"].symbol;
   const html = `
     <label>From Account</label>
     <select id="tFrom">${accountOptions()}</select>
     <label>To Account</label>
     <select id="tTo">${accountOptions()}</select>
-    <label>Amount (₹) *</label>
+    <label>Amount (${symbol}) *</label>
     <input id="tAmt" type="number" step="any" min="0.01" autofocus>
     <label>Date</label>
     <input id="tDate" type="date" value="${today()}">
@@ -406,6 +451,7 @@ function openTransfer() {
 
 function openInvestment(editId = "") {
   const i = db.investments.find(x => x.id === editId) || {};
+  const symbol = CURRENCIES[db.settings?.currency || "INR"].symbol;
   const html = `
     <label>Type</label>
     <select id="vType">
@@ -419,14 +465,14 @@ function openInvestment(editId = "") {
         <input id="vQty" type="number" step="any" value="${i.qty ?? 1}">
       </div>
       <div>
-        <label>Invested (₹)</label>
+        <label>Invested (${symbol})</label>
         <input id="vInv" type="number" step="any" value="${i.invested ?? 0}">
       </div>
     </div>
-    <label>Current Value (₹) *</label>
+    <label>Current Value (${symbol}) *</label>
     <input id="vCur" type="number" step="any" value="${i.current ?? 0}">
     <label>Broker / Provider</label>
-    <input id="vBroker" value="${esc(i.broker || "")}" placeholder="Zerodha / Groww / Bank">
+    <input id="vBroker" value="${esc(i.broker || "")}" placeholder="Broker / Bank">
     <label>Notes</label>
     <textarea id="vNote">${esc(i.note || "")}</textarea>
   `;
@@ -456,14 +502,15 @@ function openInvestment(editId = "") {
 
 function openLiability(editId = "") {
   const l = db.liabilities.find(x => x.id === editId) || {};
+  const symbol = CURRENCIES[db.settings?.currency || "INR"].symbol;
   const html = `
     <label>Liability / Loan Name *</label>
     <input id="lName" value="${esc(l.name || "")}" placeholder="Home Loan / Credit Card" autofocus>
-    <label>Outstanding Amount (₹) *</label>
+    <label>Outstanding Amount (${symbol}) *</label>
     <input id="lAmt" type="number" step="any" value="${l.amount ?? 0}">
     <label>Interest Rate (%)</label>
     <input id="lRate" type="number" step="0.01" value="${l.rate ?? 0}">
-    <label>Monthly EMI (₹)</label>
+    <label>Monthly EMI (${symbol})</label>
     <input id="lEmi" type="number" step="any" value="${l.emi ?? 0}">
     <label>Next Due Date</label>
     <input id="lDue" type="date" value="${l.due || ""}">
@@ -497,13 +544,14 @@ function editTx(id) {
   const isExpense = t.type === 'expense';
   const catList = isExpense ? db.expenseCats : db.incomeCats;
   const currentCat = t.cat || catList[0]?.name || "";
+  const symbol = CURRENCIES[db.settings?.currency || "INR"].symbol;
 
   const html = `
     <label>Category</label>
     <select id="editCat" onchange="updateEditLabels()">
       ${catList.map(c => `<option value="${esc(c.name)}" ${t.cat === c.name ? 'selected' : ''}>${esc(c.name)}</option>`).join("")}
     </select>
-    <label>Amount (₹) *</label>
+    <label>Amount (${symbol}) *</label>
     <input id="editAmt" type="number" step="any" value="${t.amount}">
     <label>Description</label>
     <input id="editDesc" value="${esc(t.desc || "")}">
@@ -545,7 +593,7 @@ function updateEditLabels() {
   $("editLabel").innerHTML = `<option value="">None</option>${labelOptions(cat)}`;
 }
 /**
- * Personal Budget PWA — v7.3 Logic Engine (Part 2/2)
+ * Personal Budget PWA — v7.6 Logic Engine (Part 2/2)
  */
 
 function openAutopay() {
@@ -569,12 +617,13 @@ function openAutopay() {
 
 function openAutopayForm(id = "") {
   const a = db.autopay.find(x => x.id === id) || {};
+  const symbol = CURRENCIES[db.settings?.currency || "INR"].symbol;
   const html = `
     <label>Name *</label>
     <input id="pName" value="${esc(a.name || "")}" placeholder="Netflix / Rent" autofocus>
     <div class="row">
       <div>
-        <label>Amount (₹) *</label>
+        <label>Amount (${symbol}) *</label>
         <input id="pAmt" type="number" step="any" value="${a.amount ?? 0}">
       </div>
       <div>
@@ -616,7 +665,6 @@ function openAutopayForm(id = "") {
   });
 }
 
-// --- Savings Goals Engine ---
 function openGoal(id = "") {
   if (!id && db.goals.length > 0) {
     openGoalList();
@@ -655,16 +703,17 @@ function openGoalList() {
 
 function openGoalForm(id = "") {
   const g = db.goals.find(x => x.id === id) || {};
+  const symbol = CURRENCIES[db.settings?.currency || "INR"].symbol;
   const html = `
     <label>Goal Name *</label>
-    <input id="gName" value="${esc(g.name || "")}" placeholder="e.g. Emergency Fund, New Phone" autofocus>
+    <input id="gName" value="${esc(g.name || "")}" placeholder="e.g. Emergency Fund, Travel" autofocus>
     <div class="row">
       <div>
-        <label>Target Amount (₹) *</label>
-        <input id="gTarget" type="number" step="any" min="1" value="${g.target ?? ""}" placeholder="50000">
+        <label>Target Amount (${symbol}) *</label>
+        <input id="gTarget" type="number" step="any" min="1" value="${g.target ?? ""}">
       </div>
       <div>
-        <label>Saved so far (₹)</label>
+        <label>Saved so far (${symbol})</label>
         <input id="gCur" type="number" step="any" min="0" value="${g.current ?? 0}">
       </div>
     </div>
@@ -698,7 +747,6 @@ function openGoalForm(id = "") {
   });
 }
 
-// --- Budgeting & Allocations ---
 function budgetBase() {
   let inc = db.tx.filter(t => t.type === 'income' && t.date?.startsWith(monthKey())).reduce((s, t) => s + Number(t.amount || 0), 0);
   let alloc = {};
@@ -729,6 +777,7 @@ function adjustedAlloc() {
 
 function openBudget() {
   const cats = db.expenseCats;
+  const symbol = CURRENCIES[db.settings?.currency || "INR"].symbol;
   const html = `
     <label>Expense Category</label>
     <select id="bCat">${cats.map(c => `<option value="${esc(c.name)}">${esc(c.name)}</option>`).join("")}</select>
@@ -738,7 +787,7 @@ function openBudget() {
       <option value="minimum">Minimum allocation</option>
       <option value="remaining">Remaining balance</option>
     </select>
-    <label>Amount (₹)</label>
+    <label>Amount (${symbol})</label>
     <input id="bAmt" type="number" step="any" min="0" value="0">
   `;
 
@@ -759,12 +808,13 @@ function openBudget() {
 
 function openBudgetTransfer() {
   const cats = db.expenseCats.map(c => c.name);
+  const symbol = CURRENCIES[db.settings?.currency || "INR"].symbol;
   const html = `
     <label>From Category</label>
     <select id="btFrom">${cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join("")}</select>
     <label>To Category</label>
     <select id="btTo">${cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join("")}</select>
-    <label>Amount (₹) *</label>
+    <label>Amount (${symbol}) *</label>
     <input id="btAmt" type="number" step="any" min="1">
     <label>Reason</label>
     <input id="btReason" placeholder="Reallocation">
@@ -792,7 +842,6 @@ function openBudgetTransfer() {
   });
 }
 
-// --- Categories & Category-Bound Labels ---
 function openCategoryManager() {
   modal(`
     <h2>Category Manager</h2>
@@ -894,9 +943,9 @@ function openLabels() {
     <h2>🏷️ Category-Specific Labels</h2>
     <p class="muted" style="margin-top:-6px;font-size:12px">Bind custom tags to specific categories (e.g. Rent to Home Bills, Mess to Food).</p>
     <div class="row" style="margin:12px 0 6px">
-      <input id="newLabelInput" placeholder="Label tag name (e.g. Rent)" style="margin:0">
-      <select id="newLabelCat" style="margin:0">
-        <option value="">(All Categories)</option>
+      <input id="newLabelInput" placeholder="Label tag name (e.g. Rent)" style="margin:0 0 6px">
+      <select id="newLabelCat" style="margin:0 0 8px">
+        <option value="">(All Categories / Global)</option>
         ${allCats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('')}
       </select>
     </div>
@@ -939,7 +988,29 @@ function removeLabel(idx) {
   openLabels();
 }
 
-// --- Insights & Reports ---
+function handleDurationChange() {
+  const type = $("txDurationType").value;
+  const container = $("durationSelectorContainer");
+
+  if (type === "month") {
+    container.innerHTML = `<select id="txMonthSelect" onchange="renderTransactions()" style="margin:0">${months().map(m => `<option value="${m}" ${m === monthKey() ? 'selected' : ''}>${monthLabel(m)}</option>`).join('')}</select>`;
+  } else if (type === "year") {
+    const currentYear = new Date().getFullYear();
+    container.innerHTML = `<select id="txYearSelect" onchange="renderTransactions()" style="margin:0">${years().map(y => `<option value="${y}" ${y === currentYear ? 'selected' : ''}>Year ${y}</option>`).join('')}</select>`;
+  } else if (type === "custom") {
+    container.innerHTML = `
+      <div class="row-flex" style="gap:6px">
+        <input type="date" id="txStartDate" value="${monthKey()}-01" onchange="renderTransactions()" style="margin:0">
+        <span style="flex:none;font-weight:bold;color:var(--muted)">to</span>
+        <input type="date" id="txEndDate" value="${today()}" onchange="renderTransactions()" style="margin:0">
+      </div>
+    `;
+  } else {
+    container.innerHTML = "";
+  }
+  renderTransactions();
+}
+
 function showInsights() {
   const m = monthKey();
   const tx = db.tx.filter(t => t.date && t.date.startsWith(m));
@@ -1085,7 +1156,6 @@ function resetData() {
   }
 }
 
-// --- Master UI Render Operations ---
 function renderHome() {
   const m = monthKey();
   const tx = db.tx.filter(t => t.date && t.date.startsWith(m));
@@ -1213,18 +1283,40 @@ function renderAccounts() {
 }
 
 function renderTransactions() {
-  const sel = $("txMonth");
-  if (sel.options.length !== 18) {
-    sel.innerHTML = months().map(m => `<option value="${m}" ${m === monthKey() ? 'selected' : ''}>${monthLabel(m)}</option>`).join('');
+  const q = ($("searchTx")?.value || "").toLowerCase();
+  const type = $("txType")?.value || "all";
+  const durationType = $("txDurationType")?.value || "month";
+
+  let filtered = db.tx.filter(t => {
+    if (!t.date) return false;
+    if (durationType === "month") {
+      const targetMonth = $("txMonthSelect")?.value || monthKey();
+      return t.date.startsWith(targetMonth);
+    } else if (durationType === "year") {
+      const targetYear = $("txYearSelect")?.value || String(new Date().getFullYear());
+      return t.date.startsWith(targetYear);
+    } else if (durationType === "custom") {
+      const start = $("txStartDate")?.value || "1970-01-01";
+      const end = $("txEndDate")?.value || "2099-12-31";
+      return t.date >= start && t.date <= end;
+    }
+    return true;
+  });
+
+  const durationIncome = filtered.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount || 0), 0);
+  const durationSpent = filtered.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount || 0), 0);
+  const durationNet = durationIncome - durationSpent;
+
+  if ($("txSummaryIncome")) $("txSummaryIncome").textContent = money(durationIncome);
+  if ($("txSummarySpent")) $("txSummarySpent").textContent = money(durationSpent);
+  if ($("txSummaryBalance")) {
+    $("txSummaryBalance").textContent = money(durationNet);
+    $("txSummaryBalance").className = durationNet >= 0 ? "green" : "red";
   }
 
-  const q = ($("searchTx").value || "").toLowerCase();
-  const type = $("txType").value;
-  const m = $("txMonth").value || monthKey();
+  const listData = filtered.filter(t => (type === 'all' || t.type === type) && JSON.stringify(t).toLowerCase().includes(q)).slice(0, 150);
 
-  const arr = db.tx.filter(t => (!t.date || t.date.startsWith(m)) && (type === 'all' || t.type === type) && JSON.stringify(t).toLowerCase().includes(q)).slice(0, 150);
-
-  $("transactionList").innerHTML = arr.map(t => `
+  $("transactionList").innerHTML = listData.map(t => `
     <div class="item">
       <div>
         <b>${esc(t.desc || t.type)}</b><br>
@@ -1238,7 +1330,7 @@ function renderTransactions() {
         <button onclick="deleteBy('tx','${t.id}')">×</button>
       </div>
     </div>
-  `).join('') || '<div class="empty">No transactions found.</div>';
+  `).join('') || '<div class="empty">No transactions found for the selected duration.</div>';
 }
 
 function renderBudget() {
@@ -1280,6 +1372,7 @@ function renderBudget() {
 }
 
 function renderAll() {
+  $("monthLabel").textContent = monthLabel();
   renderHome();
   renderAccounts();
   renderTransactions();
@@ -1297,7 +1390,7 @@ if (navigator.storage && navigator.storage.persist) {
 }
 
 window.addEventListener("DOMContentLoaded", () => {
-  $("monthLabel").textContent = monthLabel();
+  handleDurationChange();
   document.querySelectorAll(".tab").forEach(b => {
     b.onclick = () => showTab(b.dataset.tab);
   });

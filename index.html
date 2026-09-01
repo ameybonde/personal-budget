@@ -37,13 +37,14 @@ main{padding:4px 12px}
 .kpi strong{font-size:17px;display:block;margin-top:4px;white-space:nowrap}
 .row{display:flex;flex-direction:column;gap:0;width:100%}
 .row>div{width:100%;min-width:0}
-.row input, .row select{width:100%;max-width:100%;box-sizing:border-box}
+.row-flex{display:flex;gap:7px;align-items:center}
+.row-flex>*{flex:1;min-width:0}
 .actions{display:flex;gap:6px;flex-wrap:wrap}
 button,input,select,textarea{font:inherit}
 button{border:0;border-radius:15px;padding:10px 9px;background:var(--lav);color:var(--purple);font-weight:680;cursor:pointer;flex:1;min-width:0}
 button.primary{background:var(--purple);color:#fff}
 button.danger{background:#ffe5e7;color:#c33}
-input,select,textarea{width:100%;min-width:0;padding:11px;border:1px solid var(--line);border-radius:14px;background:#fff;outline:none;margin:5px 0 10px;font-size:16px}
+input,select,textarea{width:100%;max-width:100%;min-width:0;padding:11px;border:1px solid var(--line);border-radius:14px;background:#fff;outline:none;margin:5px 0 10px;font-size:16px;box-sizing:border-box}
 textarea{min-height:80px;resize:vertical}
 label{font-size:13px;color:#666;display:block;margin-top:9px;margin-bottom:4px;font-weight:650}
 .list{display:flex;flex-direction:column;gap:9px}
@@ -148,19 +149,37 @@ label{font-size:13px;color:#666;display:block;margin-top:9px;margin-bottom:4px;f
 </section>
 
 <section id="transactions" class="screen">
-  <div class="row">
-    <input id="searchTx" placeholder="Search transactions" oninput="renderTransactions()">
-    <select id="txType" onchange="renderTransactions()">
-      <option value="all">All</option>
+  <div class="card" style="margin-top:0">
+    <div class="section-title" style="margin:0 0 8px">Filtered Summary</div>
+    <div class="kpi">
+      <div><span class="muted">Income</span><strong class="green" id="txSummaryIncome">₹0</strong></div>
+      <div><span class="muted">Spent</span><strong class="red" id="txSummarySpent">₹0</strong></div>
+      <div><span class="muted">Net Balance</span><strong id="txSummaryBalance">₹0</strong></div>
+    </div>
+  </div>
+
+  <div class="row-flex">
+    <input id="searchTx" placeholder="Search transactions" oninput="renderTransactions()" style="margin:0 0 8px">
+    <select id="txType" onchange="renderTransactions()" style="margin:0 0 8px">
+      <option value="all">All Types</option>
       <option value="expense">Expenses</option>
       <option value="income">Income</option>
       <option value="transfer">Transfers</option>
     </select>
   </div>
-  <div class="row">
-    <select id="txMonth" onchange="renderTransactions()"></select>
-    <button onclick="openQuickIncome()">+ Income</button>
+
+  <div class="row-flex">
+    <select id="txDurationType" onchange="handleDurationChange()" style="margin:0 0 8px">
+      <option value="month">Monthly</option>
+      <option value="year">Yearly</option>
+      <option value="custom">Custom Range</option>
+      <option value="all">All Time</option>
+    </select>
+    <button class="primary" onclick="openQuickIncome()" style="margin:0 0 8px;flex:none;width:110px">+ Income</button>
   </div>
+
+  <div id="durationSelectorContainer" style="margin-bottom:8px"></div>
+
   <div class="section-title">Transactions</div>
   <div id="transactionList" class="list"></div>
 </section>
@@ -186,6 +205,7 @@ label{font-size:13px;color:#666;display:block;margin-top:9px;margin-bottom:4px;f
 <section id="settings" class="screen">
   <div class="section-title">Settings</div>
   <div class="card" style="padding:4px 16px">
+    <button class="setting-btn" onclick="openCurrencySelector()">💱 Change Currency</button>
     <button class="setting-btn" onclick="openCategoryManager()">🗂️ Category Manager</button>
     <button class="setting-btn" onclick="openAutopay()">🔄 Autopay & Recurring</button>
     <button class="setting-btn" onclick="openGoal()">🎯 Savings Goals</button>

@@ -1,6 +1,6 @@
 /**
- * Personal Budget PWA — v7.6 Logic Engine (Part 1/2)
- * Features: Currency Engine, Flexible Duration Summaries, Safe Persistence
+ * Personal Budget PWA — v7.8 Logic Engine (Part 1/2)
+ * Features: Complete Customizer (Theme + Fonts), Currency Engine, Dynamic Durations
  */
 
 const STORAGE_KEY = "personal-budget-db";
@@ -13,6 +13,25 @@ const CURRENCIES = {
   EUR: { symbol: "€", locale: "de-DE", name: "EUR (€) - Euro" },
   AED: { symbol: "AED ", locale: "ar-AE", name: "AED (د.إ) - UAE Dirham" }
 };
+
+const FONT_PRESETS = [
+  { id: "inter", name: "Inter (Modern UI)", font: "'Inter', -apple-system, sans-serif" },
+  { id: "system", name: "Apple / System Native", font: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" },
+  { id: "jakarta", name: "Jakarta Sans (Clean & Bold)", font: "'Plus Jakarta Sans', sans-serif" },
+  { id: "mono", name: "JetBrains Mono (Tech & Terminal)", font: "'JetBrains Mono', monospace" },
+  { id: "serif", name: "Serif Classic (Editorial)", font: "Charter, 'Times New Roman', Georgia, serif" }
+];
+
+const THEME_PRESETS = [
+  { name: "Default Soft", color: "#f8f8fb" },
+  { name: "Warm Linen", color: "#fbf8f3" },
+  { name: "Mint Foam", color: "#f2f8f5" },
+  { name: "Ice Blue", color: "#f1f5fa" },
+  { name: "Blush Rose", color: "#faf2f4" },
+  { name: "Lavender", color: "#f5f3fc" },
+  { name: "Slate Grey", color: "#f0f2f5" },
+  { name: "Pure White", color: "#ffffff" }
+];
 
 const DEFAULT_EXP = [
   { name: "Markets", icon: "🎯", color: "#e8dcff" },
@@ -58,7 +77,7 @@ const ADVICE = [
 function blank() {
   return {
     version: 7,
-    settings: { currency: "INR" },
+    settings: { currency: "INR", bgColor: "#f8f8fb", fontChoice: "inter" },
     expenseCats: DEFAULT_EXP,
     incomeCats: DEFAULT_INC,
     accounts: [],
@@ -80,9 +99,10 @@ function migrate(x) {
   Object.assign(b, x);
   b.version = 7;
   b.settings = { ...b.settings, ...(x.settings || {}) };
-  if (!b.settings.currency || !CURRENCIES[b.settings.currency]) {
-    b.settings.currency = "INR";
-  }
+  if (!b.settings.currency || !CURRENCIES[b.settings.currency]) b.settings.currency = "INR";
+  if (!b.settings.bgColor) b.settings.bgColor = "#f8f8fb";
+  if (!b.settings.fontChoice) b.settings.fontChoice = "inter";
+
   b.expenseCats = Array.isArray(x.expenseCats) && x.expenseCats.length ? x.expenseCats : DEFAULT_EXP;
   b.incomeCats = Array.isArray(x.incomeCats) && x.incomeCats.length ? x.incomeCats : DEFAULT_INC;
   b.tx = Array.isArray(x.tx) ? x.tx : [];
@@ -182,6 +202,15 @@ function years() {
   return [currentYear, currentYear - 1, currentYear - 2, currentYear - 3];
 }
 
+function applyAppAppearance() {
+  const bg = db.settings?.bgColor || "#f8f8fb";
+  document.documentElement.style.setProperty("--bg", bg);
+
+  const fontId = db.settings?.fontChoice || "inter";
+  const matchedFont = FONT_PRESETS.find(f => f.id === fontId) || FONT_PRESETS[0];
+  document.documentElement.style.setProperty("--app-font", matchedFont.font);
+}
+
 function modal(html) {
   $("modalBody").innerHTML = html;
   $("modal").classList.add("open");
@@ -222,7 +251,61 @@ function labelOptions(category = "", selected = "") {
   return filtered.map(l => `<option value="${esc(l.name)}" ${l.name === selected ? 'selected' : ''}>#${esc(l.name)}</option>`).join("");
 }
 
-// --- Currency Selector ---
+// --- Customize Engine (Themes & Typography Choices) ---
+function openCustomizer() {
+  const currentBg = db.settings?.bgColor || "#f8f8fb";
+  const currentFont = db.settings?.fontChoice || "inter";
+
+  const html = `
+    <label>Choose Background Color Preset</label>
+    <div class="color-presets">
+      ${THEME_PRESETS.map(p => `
+        <div class="color-swatch ${p.color === currentBg ? 'active' : ''}" 
+             style="background:${p.color};border:1px solid #ddd;" 
+             onclick="selectPresetBg('${p.color}')">
+          <small style="font-size:10px;font-weight:600;color:#555">${esc(p.name)}</small>
+        </div>
+      `).join('')}
+    </div>
+    <label style="margin-top:10px">Custom Hex Background</label>
+    <input type="color" id="customBgColor" value="${currentBg}" oninput="previewBg(this.value)">
+
+    <label style="margin-top:14px">Choose Typography / Font Style</label>
+    <select id="customFontChoice" onchange="previewFont(this.value)">
+      ${FONT_PRESETS.map(f => `
+        <option value="${f.id}" ${f.id === currentFont ? 'selected' : ''}>${esc(f.name)}</option>
+      `).join('')}
+    </select>
+  `;
+
+  openFormModal("🎨 Customize", html, () => {
+    const selectedBg = $("customBgColor").value;
+    const selectedFont = $("customFontChoice").value;
+
+    db.settings.bgColor = selectedBg;
+    db.settings.fontChoice = selectedFont;
+
+    applyAppAppearance();
+    save();
+    closeModal();
+  });
+}
+
+function selectPresetBg(color) {
+  if ($("customBgColor")) $("customBgColor").value = color;
+  previewBg(color);
+  document.querySelectorAll(".color-swatch").forEach(el => el.classList.toggle("active", el.style.backgroundColor === color));
+}
+
+function previewBg(color) {
+  document.documentElement.style.setProperty("--bg", color);
+}
+
+function previewFont(fontId) {
+  const matched = FONT_PRESETS.find(f => f.id === fontId) || FONT_PRESETS[0];
+  document.documentElement.style.setProperty("--app-font", matched.font);
+}
+
 function openCurrencySelector() {
   const current = db.settings?.currency || "INR";
   const html = `
@@ -232,7 +315,6 @@ function openCurrencySelector() {
         <option value="${code}" ${code === current ? 'selected' : ''}>${esc(item.name)}</option>
       `).join('')}
     </select>
-    <p class="muted" style="font-size:12px">All financial amounts, budgets, and balance totals will format with this currency symbol automatically.</p>
   `;
 
   openFormModal("Change Currency", html, () => {
@@ -245,7 +327,7 @@ function openCurrencySelector() {
   });
 }
 
-// --- Entry Form Implementations ---
+// --- Entry Form Modals ---
 function openExpense(catName) {
   const symbol = CURRENCIES[db.settings?.currency || "INR"].symbol;
   const html = `
@@ -272,10 +354,7 @@ function openExpense(catName) {
 
   openFormModal("Add Expense", html, () => {
     const amt = parseFloat($("fAmt").value);
-    if (!amt || isNaN(amt) || amt <= 0) {
-      alert("Please enter a valid amount greater than 0.");
-      return;
-    }
+    if (!amt || isNaN(amt) || amt <= 0) return alert("Please enter a valid amount greater than 0.");
 
     db.tx.unshift({
       id: uid(),
@@ -326,10 +405,7 @@ function openIncome(catName = "") {
 
   openFormModal("Add Income", html, () => {
     const amt = parseFloat($("iAmt").value);
-    if (!amt || isNaN(amt) || amt <= 0) {
-      alert("Please enter a valid amount greater than 0.");
-      return;
-    }
+    if (!amt || isNaN(amt) || amt <= 0) return alert("Please enter a valid amount greater than 0.");
 
     const category = catName || ($("iCat") ? $("iCat").value : "Salary");
 
@@ -593,7 +669,7 @@ function updateEditLabels() {
   $("editLabel").innerHTML = `<option value="">None</option>${labelOptions(cat)}`;
 }
 /**
- * Personal Budget PWA — v7.6 Logic Engine (Part 2/2)
+ * Personal Budget PWA — v7.8 Logic Engine (Part 2/2)
  */
 
 function openAutopay() {
@@ -1139,6 +1215,7 @@ function importData(e) {
       const parsed = JSON.parse(r.result);
       if (!parsed || typeof parsed !== "object") throw new Error("Invalid structure");
       db = migrate(parsed);
+      applyAppAppearance();
       save();
       alert("Data restored successfully.");
     } catch (err) {
@@ -1152,6 +1229,7 @@ function importData(e) {
 function resetData() {
   if (confirm("Delete ALL local financial records? Ensure you have an exported JSON backup.")) {
     db = blank();
+    applyAppAppearance();
     save();
   }
 }
@@ -1388,69 +1466,15 @@ function showTab(id) {
 if (navigator.storage && navigator.storage.persist) {
   navigator.storage.persist().catch(() => {});
 }
-// --- Theme & Background Customization Engine ---
-const THEME_PRESETS = [
-  { name: "Default Soft", color: "#f8f8fb" },
-  { name: "Warm Linen", color: "#fbf8f3" },
-  { name: "Mint Foam", color: "#f2f8f5" },
-  { name: "Ice Blue", color: "#f1f5fa" },
-  { name: "Blush Rose", color: "#faf2f4" },
-  { name: "Lavender", color: "#f5f3fc" },
-  { name: "Slate Grey", color: "#f0f2f5" },
-  { name: "Pure White", color: "#ffffff" }
-];
-
-function applyTheme(color) {
-  const bg = color || db.settings?.bgColor || "#f8f8fb";
-  document.documentElement.style.setProperty("--bg", bg);
-}
-
-function openThemeCustomizer() {
-  const current = db.settings?.bgColor || "#f8f8fb";
-  const html = `
-    <label>Choose Preset Background</label>
-    <div class="color-presets">
-      ${THEME_PRESETS.map(p => `
-        <div class="color-swatch ${p.color === current ? 'active' : ''}" 
-             style="background:${p.color};border:1px solid #ddd;" 
-             onclick="selectPresetBg('${p.color}')">
-          <small style="font-size:10px;font-weight:600;color:#555">${esc(p.name)}</small>
-        </div>
-      `).join('')}
-    </div>
-    <label style="margin-top:14px">Or Custom Hex Color</label>
-    <input type="color" id="customBgColor" value="${current}" oninput="previewBg(this.value)">
-  `;
-
-  openFormModal("App Background Theme", html, () => {
-    const selected = $("customBgColor").value;
-    db.settings.bgColor = selected;
-    applyTheme(selected);
-    save();
-    closeModal();
-  });
-}
-
-function selectPresetBg(color) {
-  if ($("customBgColor")) $("customBgColor").value = color;
-  previewBg(color);
-  document.querySelectorAll(".color-swatch").forEach(el => el.classList.toggle("active", el.style.backgroundColor === color));
-}
-
-function previewBg(color) {
-  document.documentElement.style.setProperty("--bg", color);
-}
-
 
 window.addEventListener("DOMContentLoaded", () => {
-  applyTheme(db.settings?.bgColor);
+  applyAppAppearance();
   handleDurationChange();
   document.querySelectorAll(".tab").forEach(b => {
     b.onclick = () => showTab(b.dataset.tab);
   });
   renderAll();
 });
-
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => {});

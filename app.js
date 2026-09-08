@@ -1,10 +1,12 @@
 /**
- * Personal Budget PWA — v7.8 Logic Engine (Part 1/2)
- * Features: Complete Customizer (Theme + Fonts), Currency Engine, Dynamic Durations
+ * Personal Budget PWA — v7.9 Logic Engine (Part 1/2)
+ * Features: Auto-Debit Engine, Monthly-Scoped Budget Transfers, Customizer & Currency
  */
 
 const STORAGE_KEY = "personal-budget-db";
 const LEGACY_KEYS = ["personalBudgetLocalV2", "pb_v6", "pb_v5", "pb_v4", "pb_v3", "pb_v2", "pb_v1"];
+
+let currentBudgetMonth = "";
 
 const CURRENCIES = {
   INR: { symbol: "₹", locale: "en-IN", name: "INR (₹) - Indian Rupee" },
@@ -211,6 +213,50 @@ function applyAppAppearance() {
   document.documentElement.style.setProperty("--app-font", matchedFont.font);
 }
 
+// --- Automated Autopay Execution Engine ---
+function processAutopay() {
+  const curDate = today();
+  let changed = false;
+
+  db.autopay.forEach(a => {
+    if (!a.next || a.next > curDate) return;
+
+    db.tx.unshift({
+      id: uid(),
+      type: "expense",
+      cat: a.cat || "Home Bills",
+      amount: Number(a.amount) || 0,
+      desc: `${a.name} (Autopay)`,
+      date: a.next,
+      account: a.account || (db.accounts[0]?.id || ""),
+      label: "Autopay",
+      note: `Auto-debited on ${a.next}`
+    });
+
+    let nextD = new Date(a.next);
+    if (isNaN(nextD.getTime())) nextD = new Date();
+
+    if (a.frequency === "Weekly") {
+      nextD.setDate(nextD.getDate() + 7);
+    } else if (a.frequency === "Monthly") {
+      nextD.setMonth(nextD.getMonth() + 1);
+    } else if (a.frequency === "Quarterly") {
+      nextD.setMonth(nextD.getMonth() + 3);
+    } else if (a.frequency === "Yearly") {
+      nextD.setFullYear(nextD.getFullYear() + 1);
+    } else {
+      nextD.setMonth(nextD.getMonth() + 1);
+    }
+
+    a.next = localDate(nextD);
+    changed = true;
+  });
+
+  if (changed) {
+    save();
+  }
+}
+
 function modal(html) {
   $("modalBody").innerHTML = html;
   $("modal").classList.add("open");
@@ -251,7 +297,6 @@ function labelOptions(category = "", selected = "") {
   return filtered.map(l => `<option value="${esc(l.name)}" ${l.name === selected ? 'selected' : ''}>#${esc(l.name)}</option>`).join("");
 }
 
-// --- Customize Engine (Themes & Typography Choices) ---
 function openCustomizer() {
   const currentBg = db.settings?.bgColor || "#f8f8fb";
   const currentFont = db.settings?.fontChoice || "inter";
@@ -327,7 +372,6 @@ function openCurrencySelector() {
   });
 }
 
-// --- Entry Form Modals ---
 function openExpense(catName) {
   const symbol = CURRENCIES[db.settings?.currency || "INR"].symbol;
   const html = `
@@ -669,7 +713,7 @@ function updateEditLabels() {
   $("editLabel").innerHTML = `<option value="">None</option>${labelOptions(cat)}`;
 }
 /**
- * Personal Budget PWA — v7.8 Logic Engine (Part 2/2)
+ * Personal Budget PWA — v7.9 Logic Engine (Part 2/2)
  */
 
 function openAutopay() {
@@ -823,8 +867,12 @@ function openGoalForm(id = "") {
   });
 }
 
-function budgetBase() {
-  let inc = db.tx.filter(t => t.type === 'income' && t.date?.startsWith(monthKey())).reduce((s, t) => s + Number(t.amount || 0), 0);
+// --- Month-Scoped Budget Engine ---
+function budgetBase(targetMonth = currentBudgetMonth) {
+  let inc = db.tx
+    .filter(t => t.type === 'income' && t.date?.startsWith(targetMonth))
+    .reduce((s, t) => s + Number(t.amount || 0), 0);
+    
   let alloc = {};
   let fixed = 0, min = 0, remaining = [];
 
@@ -842,12 +890,14 @@ function budgetBase() {
   return { inc, alloc, total: Object.values(alloc).reduce((s, v) => s + v, 0) };
 }
 
-function adjustedAlloc() {
-  let a = { ...budgetBase().alloc };
-  db.budgetTransfers.filter(t => t.date?.startsWith(monthKey())).forEach(t => {
-    a[t.from] = (a[t.from] || 0) - Number(t.amount);
-    a[t.to] = (a[t.to] || 0) + Number(t.amount);
-  });
+function adjustedAlloc(targetMonth = currentBudgetMonth) {
+  let a = { ...budgetBase(targetMonth).alloc };
+  db.budgetTransfers
+    .filter(t => t.date && t.date.startsWith(targetMonth))
+    .forEach(t => {
+      a[t.from] = (a[t.from] || 0) - Number(t.amount);
+      a[t.to] = (a[t.to] || 0) + Number(t.amount);
+    });
   return a;
 }
 
@@ -896,7 +946,7 @@ function openBudgetTransfer() {
     <input id="btReason" placeholder="Reallocation">
   `;
 
-  openFormModal("Move Budget", html, () => {
+  openFormModal("Move Budget (This Month Only)", html, () => {
     const from = $("btFrom").value;
     const to = $("btTo").value;
     const amt = parseFloat($("btAmt").value);
@@ -1412,8 +1462,9 @@ function renderTransactions() {
 }
 
 function renderBudget() {
-  const alloc = adjustedAlloc();
-  const m = monthKey();
+  currentBudgetMonth = monthKey();
+  const m = currentBudgetMonth;
+  const alloc = adjustedAlloc(m);
   const spentBy = {};
 
   db.tx.filter(t => t.type === 'expense' && t.date?.startsWith(m)).forEach(t => {
@@ -1446,7 +1497,7 @@ function renderBudget() {
       <div><b>${esc(t.from)} → ${esc(t.to)}</b><br><span class="muted">${esc(t.reason || 'Reallocation')} · ${esc(t.date)}</span></div>
       <b>${money(t.amount)}</b>
     </div>
-  `).join('') || '<div class="card muted">No transfers this month.</div>';
+  `).join('') || '<div class="card muted">No transfers for this month. Baseline rules active.</div>';
 }
 
 function renderAll() {
@@ -1468,7 +1519,9 @@ if (navigator.storage && navigator.storage.persist) {
 }
 
 window.addEventListener("DOMContentLoaded", () => {
+  currentBudgetMonth = monthKey();
   applyAppAppearance();
+  processAutopay();
   handleDurationChange();
   document.querySelectorAll(".tab").forEach(b => {
     b.onclick = () => showTab(b.dataset.tab);
